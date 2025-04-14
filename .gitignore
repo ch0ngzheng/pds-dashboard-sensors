@@ -41,7 +41,7 @@ yarn-debug.log
 .DS_Store
 
 # Firebase
-firebase-credentials.json
+pds-studio-firebase-adminsdk-fbsvc-cb9200e4d3.json.json
 
 # Compiled CSS
 app/static/css/tailwind.css

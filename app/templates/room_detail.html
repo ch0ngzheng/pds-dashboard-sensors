@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Energy Dashboard - {{ room.name|default('Room') }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Room Overview -->
+    <div class="card mb-4">
+        <div class="text-center">
+            <div class="text-gray-600">Current Consumption</div>
+            <div class="text-3xl font-bold">{{ room.consumption|default('XX') }} kWh</div>
+            
+            <!-- Status Badge -->
+            {% set status = room.status|default('optimal') %}
+            <div class="status-badge status-{{ status }} inline-block mt-2">
+                {{ status|capitalize }}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Consumption Visualization -->
+    <div class="card">
+        <h2 class="text-xl font-semibold mb-2">Consumption</h2>
+        
+        <!-- Circle chart placeholder -->
+        <div class="bg-gray-200 rounded-full h-52 w-52 mx-auto flex items-center justify-center text-gray-500 mb-4">
+            Consumption Circle Chart
+        </div>
+        
+        <!-- Historical graph placeholder -->
+        <div class="bg-gray-200 rounded-lg h-32 flex items-center justify-center text-gray-500">
+            Consumption History Graph
+        </div>
+    </div>
+    
+    <!-- Appliances -->
+    <div class="card">
+        <h2 class="text-xl font-semibold mb-3">Appliances</h2>
+        
+        <div class="grid grid-cols-3 gap-2">
+            {% for appliance in appliances %}
+                <div class="border rounded-lg p-2 text-center relative appliance-toggle" 
+                     data-id="{{ appliance.id }}" 
+                     data-state="{{ appliance.state|default('off')|lower }}">
+                    <div class="text-sm">{{ appliance.name }}</div>
+                    <div class="font-medium mt-1">
+                        {% if appliance.state|default('off')|lower == 'on' %}
+                            <span class="text-green-600">ON</span>
+                        {% else %}
+                            <span class="text-gray-600">OFF</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="col-span-3 text-center py-4 text-gray-500">
+                    <p>No appliances data available</p>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Room Stats -->
+    <div class="card">
+        <h2 class="text-xl font-semibold mb-3">Room Stats</h2>
+        
+        <div class="space-y-3">
+            <div class="border rounded-lg p-3">
+                <div class="text-sm text-gray-600">Average Consumption</div>
+                <div class="font-medium">{{ room.avg_consumption|default('XX') }} kWh/day</div>
+            </div>
+            
+            <div class="border rounded-lg p-3">
+                <div class="text-sm text-gray-600">Peak Usage Time</div>
+                <div class="font-medium">{{ room.peak_time|default('XX:XX') }}</div>
+            </div>
+            
+            <div class="border rounded-lg p-3">
+                <div class="text-sm text-gray-600">Efficiency Score</div>
+                <div class="font-medium">{{ room.efficiency|default('XX') }}/100</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/room_detail.js') }}"></script>
+{% endblock %}

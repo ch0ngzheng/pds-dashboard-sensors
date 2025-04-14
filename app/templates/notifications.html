@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Energy Dashboard - Notifications{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Notifications List -->
+    <div class="space-y-3">
+        {% for notification in notifications %}
+            {% set priority = notification.priority|default('info') %}
+            
+            <div class="card relative
+                {% if priority == 'high' %}border-l-4 border-red-500
+                {% elif priority == 'medium' %}border-l-4 border-orange-500
+                {% elif priority == 'low' %}border-l-4 border-blue-500
+                {% else %}border-l-4 border-gray-500{% endif %}">
+                
+                <!-- Timestamp in top right -->
+                <div class="absolute top-0 right-0 text-sm text-gray-500 text-right" style="padding-right: 10px;">
+                    {% set timestamp_parts = notification.timestamp.split(' ') %}
+                    {% if timestamp_parts|length >= 3 %}
+                        <div style="height: 20px; width: 100px;">{{ timestamp_parts[0] }}</div>
+                        <div style="height: 20px; width: 100px;">{{ timestamp_parts[1] }} {{ timestamp_parts[2] }}</div>
+                    {% else %}
+                        {{ notification.timestamp }}
+                    {% endif %}
+                </div>
+                
+                <div class="pt-10"> <!-- Add padding top to make room for timestamp -->
+                    <h3 class="font-medium">{{ notification.title }}</h3>
+                    <p class="text-gray-700 mt-1" style="width: 320px; height: 48px; overflow: hidden;">{{ notification.message }}</p>
+                </div>
+                
+                {% if notification.action %}
+                    <div class="mt-2 pt-2 border-t">
+                        <a href="{{ notification.action_url|default('#') }}" class="text-blue-500 text-sm">
+                            {{ notification.action }}
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="text-center py-8 text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p>No notifications at this time</p>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+{% endblock %}

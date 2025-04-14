@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom component classes */
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors;
+  }
+  
+  .btn-primary {
+    @apply bg-blue-500 text-white hover:bg-blue-600;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow p-4;
+  }
+  
+  .status-badge {
+    @apply px-3 py-1 rounded-full text-sm font-medium;
+  }
+  
+  .status-optimal {
+    @apply bg-optimal text-white;
+  }
+  
+  .status-sub-optimal {
+    @apply bg-sub-optimal text-white;
+  }
+  
+  .status-critical {
+    @apply bg-critical text-white;
+  }
+  
+  .nav-link {
+    @apply flex items-center p-2 rounded-md hover:bg-gray-200;
+  }
+  
+  .nav-link-active {
+    @apply bg-gray-200;
+  }
+  
+  .floor-card {
+    @apply rounded-lg p-4 border-2 mb-3;
+  }
+  
+  .floor-optimal {
+    @apply border-optimal;
+  }
+  
+  .floor-sub-optimal {
+    @apply border-sub-optimal;
+  }
+  
+  .floor-critical {
+    @apply border-critical;
+  }
+}

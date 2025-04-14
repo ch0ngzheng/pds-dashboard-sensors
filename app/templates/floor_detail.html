@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Energy Dashboard - {{ floor.name|default('Floor') }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Floor Overview -->
+    <div class="card mb-4">
+        <div class="text-center">
+            <div class="text-gray-600">Current Consumption</div>
+            <div class="text-3xl font-bold">{{ floor.consumption|default('XX') }} kWatt</div>
+            
+            <!-- Status Badge -->
+            {% set status = floor.status|default('optimal') %}
+            <div class="status-badge status-{{ status }} inline-block mt-2">
+                {{ status|capitalize }}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Floor Plan -->
+    <div class="card">
+        <h2 class="text-xl font-semibold mb-2">Floor Plan</h2>
+        <div class="bg-gray-200 rounded-lg h-48 flex items-center justify-center text-gray-500">
+            Floor Plan Visualization
+        </div>
+    </div>
+    
+    <!-- Rooms on this Floor -->
+    <div>
+        <h2 class="text-xl font-semibold mb-3">Rooms</h2>
+        
+        <div class="space-y-3">
+            {% for room in rooms %}
+                {% set status = room.status|default('optimal') %}
+                <a href="{{ url_for('main.room_detail', room_id=room.id) }}" class="block">
+                    <div class="floor-card floor-{{ status }}">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-medium">{{ room.name }}</h3>
+                                <div class="status-badge status-{{ status }} inline-block mt-1 text-xs">
+                                    {{ status|capitalize }}
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-bold">{{ room.consumption|default('XX') }} kWh</div>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            {% else %}
+                <div class="text-center py-4 text-gray-500">
+                    <p>No rooms available for this floor</p>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/floor_detail.js') }}"></script>
+{% endblock %}

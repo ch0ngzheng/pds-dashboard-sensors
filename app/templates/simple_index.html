@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Energy Dashboard - Simple Home{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 gap-4">
+        <div class="card bg-blue-100">
+            <div class="text-lg font-medium text-center">Total Power</div>
+            <div class="text-2xl font-bold text-center">{{ battery.current_power|default('--') }} kW</div>
+        </div>
+        <div class="card bg-green-100">
+            <div class="text-lg font-medium text-center">Battery</div>
+            <div class="text-2xl font-bold text-center">{{ battery.percentage|default('--') }}%</div>
+        </div>
+    </div>
+
+    <!-- Battery Card -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xl font-semibold">Battery Status</h2>
+            <a href="{{ url_for('battery.info') }}" class="text-blue-500 text-sm">View Details</a>
+        </div>
+        
+        <!-- Battery Visualization (Simple Version) -->
+        <div class="bg-gray-200 rounded-full h-6 mb-4">
+            <div class="bg-green-500 h-6 rounded-full" id="battery-level"></div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <p class="text-sm text-gray-600">Charging Rate:</p>
+                <p class="font-medium">{{ battery.charging_rate|default('--') }} kW/h</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Discharging Rate:</p>
+                <p class="font-medium">{{ battery.discharging_rate|default('--') }} kW/h</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug Information -->
+    <div class="card bg-gray-100">
+        <h2 class="text-xl font-semibold mb-2">Debug Information</h2>
+        <pre class="text-xs overflow-auto p-2 bg-gray-200 rounded">Battery Data: {{ battery|tojson }}</pre>
+    </div>
+</div>
+
+<script>
+    // Set battery level width after page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        const batteryLevel = document.getElementById('battery-level');
+        const batteryPercentage = {{ battery.percentage|default(0) }};
+        batteryLevel.style.width = batteryPercentage + '%';
+        console.log('Battery percentage:', batteryPercentage);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Energy Dashboard - Home{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Building Section Image (Clickable) -->
+    <div class="card p-0 overflow-hidden">
+        <a href="{{ url_for('main.floors') }}" class="block">
+            <img src="{{ url_for('static', filename='images/building_section.jpg') }}" alt="Building Section View" class="w-full h-auto hover:opacity-90 transition-opacity">
+        </a>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 gap-4">
+        <div class="card bg-blue-100">
+            <div class="text-lg font-medium text-center">Consumption</div>
+            <div class="text-2xl font-bold text-center">{{ battery.current_power|default('--') }} kW</div>
+        </div>
+        <div class="card bg-green-100">
+            <div class="text-lg font-medium text-center">Battery</div>
+            <div class="text-2xl font-bold text-center">{{ battery.percentage|default('--') }}%</div>
+        </div>
+    </div>
+
+    <!-- Battery Card -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xl font-semibold">Battery Status</h2>
+            <a href="{{ url_for('battery.info') }}" class="text-blue-500 text-sm">View Details</a>
+        </div>
+        
+        <!-- Battery Visualization -->
+        <div class="bg-gray-200 rounded-full h-6 mb-4">
+            <div class="bg-green-500 h-6 rounded-full battery-level"></div>
+        </div>
+        <script>
+            // Set battery level width immediately
+            document.addEventListener('DOMContentLoaded', function() {
+                const batteryLevel = document.querySelector('.battery-level');
+                batteryLevel.style.width = '{{ battery.percentage|default("0") }}%';
+            });
+        </script>
+        
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <p class="text-sm text-gray-600">Charging Rate:</p>
+                <p class="font-medium">{{ battery.charging_rate|default('--') }} kW/h</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Discharging Rate:</p>
+                <p class="font-medium">{{ battery.discharging_rate|default('1.8') }} kW/h</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visitors Card -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xl font-semibold">Visitors</h2>
+            <a href="{{ url_for('main.visitors') }}" class="text-blue-500 text-sm">View All</a>
+        </div>
+        
+        <div class="space-y-2">
+            {% if visitors and visitors.rooms %}
+                {% for room, count in visitors.rooms.items() %}
+                <div class="border rounded-lg p-3 flex justify-between items-center">
+                    <span>{{ room }}</span>
+                    <span class="font-medium">{{ count }} visitors</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-gray-500 text-center py-4">No visitor data available</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Floor Status Quick View -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xl font-semibold">Floor Status</h2>
+            <a href="{{ url_for('main.floors') }}" class="text-blue-500 text-sm">View All</a>
+        </div>
+        
+        <div class="space-y-2">
+            {% for status in ['optimal', 'sub-optimal', 'critical'] %}
+                <div class="flex items-center justify-between p-2 border rounded-lg">
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full mr-2
+                            {% if status == 'optimal' %}bg-optimal
+                            {% elif status == 'sub-optimal' %}bg-sub-optimal
+                            {% else %}bg-critical{% endif %}">
+                        </div>
+                        <span class="capitalize">{{ status }}</span>
+                    </div>
+                    <span class="font-medium">
+                        {{ floor_status_counts[status] }} floors
+                    </span>
+                </div>
+            {% endfor %}
+            
+            <!-- List of floors with their status -->
+            <div class="mt-4 pt-2 border-t">
+                {% for floor in floors %}
+                    <a href="{{ url_for('main.floor_detail', floor_id=floor.id) }}" class="block">
+                        <div class="flex items-center justify-between p-2 border rounded-lg mt-2 hover:bg-gray-50">
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full mr-2
+                                    {% if floor.status == 'optimal' %}bg-optimal
+                                    {% elif floor.status == 'sub-optimal' %}bg-sub-optimal
+                                    {% else %}bg-critical{% endif %}">
+                                </div>
+                                <span>{{ floor.name }}</span>
+                            </div>
+                            <span class="text-sm text-gray-600">{{ floor.consumption }} kWh</span>
+                        </div>
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/index.js') }}"></script>
+{% endblock %}

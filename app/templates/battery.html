@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Energy Dashboard - Battery{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Battery Status -->
+    <div class="card text-center">
+        <h2 class="text-xl font-semibold mb-2">Battery Status</h2>
+        
+        <!-- Battery Level Visualization -->
+        <div class="w-32 h-64 border-2 border-gray-300 rounded-lg mx-auto mb-4 relative">
+            {% set level = battery.percentage|default(50)|int %}
+            {% set level_height = (level / 100) * 100 %}
+            <div class="absolute bottom-0 left-0 right-0 bg-green-500 rounded-b-md transition-all" 
+                 style="height: {{ level_height }}%; {% if level < 20 %}background-color: #e74c3c;{% elif level < 50 %}background-color: #f39c12;{% endif %}">
+            </div>
+            <div class="absolute inset-0 flex items-center justify-center font-bold text-2xl 
+                      {% if level > 50 %}text-white{% else %}text-gray-800{% endif %}">
+                {{ level }}%
+            </div>
+        </div>
+        
+        <div class="text-lg font-medium">
+            {% if level >= 80 %}
+                Excellent
+            {% elif level >= 50 %}
+                Good
+            {% elif level >= 20 %}
+                Fair
+            {% else %}
+                Low
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Battery Info -->
+    <div class="card">
+        <h2 class="text-xl font-semibold mb-3">Battery Information</h2>
+        
+        <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-2">
+                <div class="border rounded-lg p-3">
+                    <div class="text-sm text-gray-600">Capacity</div>
+                    <div class="font-medium">{{ battery.capacity|default('XX') }} kWh</div>
+                </div>
+                <div class="border rounded-lg p-3">
+                    <div class="text-sm text-gray-600">Battery Life</div>
+                    <div class="font-medium">{{ battery.life|default('XX') }} Years</div>
+                </div>
+            </div>
+            
+            <div class="border rounded-lg p-3">
+                <div class="text-sm text-gray-600">Solar Panel Status</div>
+                <div class="font-medium">
+                    {% if battery.solar_active|default(false) %}
+                        <span class="text-green-600">Active - Generating</span>
+                    {% else %}
+                        <span class="text-gray-600">Inactive</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="border rounded-lg p-3">
+                <div class="text-sm text-gray-600">Battery Health</div>
+                <div class="font-medium">{{ battery.health|default('XX') }}%</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Battery Stats -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xl font-semibold">Battery Stats</h2>
+            <a href="{{ url_for('battery.grid') }}" class="text-blue-500 text-sm">View Grid</a>
+        </div>
+        
+        <div class="space-y-3">
+            <div class="border rounded-lg p-3">
+                <div class="text-sm text-gray-600">Charging Rate</div>
+                <div class="font-medium">{{ battery.charging_rate|default('XX') }} kW/h</div>
+            </div>
+            
+            <div class="border rounded-lg p-3">
+                <div class="text-sm text-gray-600">Discharging Rate</div>
+                <div class="font-medium">{{ battery.discharging_rate|default('XX') }} kW/h</div>
+            </div>
+            
+            <div class="bg-gray-200 rounded-lg h-48 flex items-center justify-center text-gray-500">
+                Battery Charging Wattage Chart
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/battery.js') }}"></script>
+{% endblock %}

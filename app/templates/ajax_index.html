@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Energy Dashboard - AJAX Home{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 gap-4">
+        <div class="card bg-blue-100">
+            <div class="text-lg font-medium text-center">Total Power</div>
+            <div class="text-2xl font-bold text-center" id="current-power">-- kW</div>
+        </div>
+        <div class="card bg-green-100">
+            <div class="text-lg font-medium text-center">Battery</div>
+            <div class="text-2xl font-bold text-center" id="battery-percentage">--%</div>
+        </div>
+    </div>
+
+    <!-- Battery Card -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xl font-semibold">Battery Status</h2>
+            <a href="{{ url_for('battery.info') }}" class="text-blue-500 text-sm">View Details</a>
+        </div>
+        
+        <!-- Battery Visualization -->
+        <div class="bg-gray-200 rounded-full h-6 mb-4">
+            <div class="bg-green-500 h-6 rounded-full" id="battery-level" style="width: 0%"></div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <p class="text-sm text-gray-600">Charging Rate:</p>
+                <p class="font-medium" id="charging-rate">-- kW/h</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-600">Discharging Rate:</p>
+                <p class="font-medium" id="discharging-rate">-- kW/h</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visitors Card -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xl font-semibold">Visitors</h2>
+            <a href="{{ url_for('main.visitors') }}" class="text-blue-500 text-sm">View All</a>
+        </div>
+        
+        <div class="space-y-2" id="visitors-container">
+            <p class="text-gray-500 text-center py-4">Loading visitor data...</p>
+        </div>
+    </div>
+
+    <!-- Floor Status Quick View -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xl font-semibold">Floor Status</h2>
+            <a href="{{ url_for('main.floors') }}" class="text-blue-500 text-sm">View All</a>
+        </div>
+        
+        <div class="space-y-2">
+            {% for status in ['optimal', 'sub-optimal', 'critical'] %}
+                <div class="flex items-center justify-between p-2 border rounded-lg">
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full mr-2
+                            {% if status == 'optimal' %}bg-optimal
+                            {% elif status == 'sub-optimal' %}bg-sub-optimal
+                            {% else %}bg-critical{% endif %}">
+                        </div>
+                        <span class="capitalize">{{ status }}</span>
+                    </div>
+                    <span class="font-medium">
+                        <!-- In a real app, you'd calculate these counts from the data -->
+                        {% if status == 'optimal' %}2
+                        {% elif status == 'sub-optimal' %}1
+                        {% else %}1{% endif %} floors
+                    </span>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Function to load battery data
+    function loadBatteryData() {
+        fetch('/data')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const battery = data.battery;
+                    
+                    // Update battery percentage
+                    document.getElementById('battery-percentage').textContent = battery.percentage + '%';
+                    
+                    // Update battery level visualization
+                    document.getElementById('battery-level').style.width = battery.percentage + '%';
+                    
+                    // Update other battery info
+                    document.getElementById('current-power').textContent = battery.current_power + ' kW';
+                    document.getElementById('charging-rate').textContent = battery.charging_rate + ' kW/h';
+                    document.getElementById('discharging-rate').textContent = battery.discharging_rate + ' kW/h';
+                    
+                    console.log('Battery data loaded successfully:', battery);
+                } else {
+                    console.error('Error loading battery data:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching battery data:', error);
+            });
+    }
+    
+    // Function to load visitor data
+    function loadVisitorData() {
+        fetch('/debug')
+            .then(response => response.json())
+            .then(data => {
+                const visitors = data.visitors;
+                const container = document.getElementById('visitors-container');
+                
+                // Clear container
+                container.innerHTML = '';
+                
+                if (visitors && visitors.rooms) {
+                    // Add each room
+                    Object.entries(visitors.rooms).forEach(([room, count]) => {
+                        const roomElement = document.createElement('div');
+                        roomElement.className = 'border rounded-lg p-3 flex justify-between items-center';
+                        roomElement.innerHTML = `
+                            <span>${room}</span>
+                            <span class="font-medium">${count} visitors</span>
+                        `;
+                        container.appendChild(roomElement);
+                    });
+                } else {
+                    container.innerHTML = '<p class="text-gray-500 text-center py-4">No visitor data available</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching visitor data:', error);
+                const container = document.getElementById('visitors-container');
+                container.innerHTML = '<p class="text-gray-500 text-center py-4">Error loading visitor data</p>';
+            });
+    }
+    
+    // Load data when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        loadBatteryData();
+        loadVisitorData();
+        
+        // Refresh data every 30 seconds
+        setInterval(loadBatteryData, 30000);
+        setInterval(loadVisitorData, 30000);
+    });
+</script>
+{% endblock %}

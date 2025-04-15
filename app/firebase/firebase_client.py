@@ -1,5 +1,6 @@
 from firebase_admin import db
 import traceback
+import time
 
 class FirebaseClient:
     @staticmethod
@@ -50,17 +51,121 @@ class FirebaseClient:
             }
     
     @staticmethod
-    def get_visitors():
-        """Get visitors information"""
+    def cleanup_inactive_tags():
+        """Remove inactive tags and update guest locations"""
         try:
-            # Get reference to the database
-            ref = db.reference('/energy_dashboard')
-            visitors_ref = ref.child('visitors')
-            return visitors_ref.get() or {"count": 100, "trend": "up"}
+            current_time = int(time.time())
+            room_ref = db.reference('/rooms/Living Room')
+            room_data = room_ref.get() or {}
+            
+            # Get all readers' data
+            readers_data = room_data.get('readers', {})
+            active_tags = set()
+            inactive_tags = set()
+            
+            # Check each reader's in-range tags
+            for reader_id, reader_data in readers_data.items():
+                in_range = reader_data.get('inRange', {}) or {}
+                for tag_id, last_seen in in_range.items():
+                    if current_time - last_seen < 300:  # 5 minutes threshold
+                        active_tags.add(tag_id)
+                    else:
+                        inactive_tags.add(tag_id)
+                        # Remove inactive tag from reader's range
+                        db.reference(f'/rooms/Living Room/readers/{reader_id}/inRange/{tag_id}').delete()
+            
+            # Update guest locations for inactive tags
+            for tag_id in inactive_tags:
+                tag_ref = db.reference(f'/tags/{tag_id}')
+                tag_data = tag_ref.get()
+                if tag_data and 'guestId' in tag_data:
+                    guest_ref = db.reference(f'/guests/{tag_data["guestId"]}')
+                    guest_ref.update({
+                        'currentRoom': None,
+                        'lastSeen': current_time
+                    })
+                # Update tag data
+                tag_ref.update({
+                    'currentRoom': None,
+                    'lastSeen': current_time
+                })
+            
+            return True
+        except Exception as e:
+            print(f"Error cleaning up inactive tags: {e}")
+            return False
+
+    @staticmethod
+    def get_visitors():
+        """Get visitors information including guest details"""
+        try:
+            # Get data from /energy_dashboard/visitors/rooms where ESP32 writes user locations
+            ref = db.reference('/energy_dashboard/visitors/rooms')
+            rooms_data = ref.get()
+            
+            if not rooms_data:
+                return {"count": 0, "trend": "down", "last_activity": 0, "rooms": {}, "guests": {}}
+            
+            rooms = {}
+            guests = {}
+            total = 0
+            last_activity = 0
+            current_time = int(time.time())
+            
+            # Process each room
+            for room_name, room_info in rooms_data.items():
+                if not room_info or 'users' not in room_info:
+                    continue
+                    
+                active_users = []
+                # Process each user in the room
+                for user_id, user_info in room_info['users'].items():
+                    if not user_info:
+                        continue
+                        
+                    last_seen = user_info.get('last_seen', 0)
+                    # Only include users seen in last 5 minutes
+                    if current_time - last_seen < 300:
+                        user_data = {
+                            'name': user_id,  # Use user_id as name for now
+                            'currentRoom': room_name,
+                            'lastSeen': last_seen,
+                            'present': user_info.get('present', False)
+                        }
+                        active_users.append(user_data)
+                        # Fetch additional user details from /users/<user_id>
+                        try:
+                            user_ref = db.reference(f'/users/{user_id}')
+                            user_details = user_ref.get() or {}
+                            # Merge additional fields if available
+                            for key in ['firstName', 'lastName', 'dob', 'name', 'tags', 'userId', 'currentRoom', 'lastSeen']:
+                                if key in user_details:
+                                    user_data[key] = user_details[key]
+                        except Exception as enrich_e:
+                            print(f'Error enriching user {user_id}:', enrich_e)
+                        guests[user_id] = user_data
+                        last_activity = max(last_activity, last_seen)
+                        total += 1
+                
+                if active_users:
+                    rooms[room_name] = len(active_users)
+            
+            result = {
+                "count": total,
+                "trend": "up" if total > 0 else "down",
+                "last_activity": last_activity,
+                "rooms": rooms,
+                "guests": guests
+            }
+            
+            return result
+        except Exception as e:
+            print(f"Error getting visitors: {str(e)}")
+            return {"count": 0, "trend": "down", "error": str(e)}
         except Exception as e:
             print(f"Error getting visitors info: {e}")
             traceback.print_exc()
-            return {"count": 100, "trend": "up", "error": str(e)}
+            return {"count": 0, "trend": "down", "error": str(e)}
     
     @staticmethod
     def get_notifications():
@@ -158,6 +263,27 @@ class FirebaseClient:
             # Return empty list instead of default data
             return []
     
+    @staticmethod
+    def debug_firebase_data():
+        """Debug function to inspect Firebase data structure"""
+        try:
+            # Get root reference
+            root_ref = db.reference('/')
+            data = root_ref.get()
+            
+            print("\n=== Firebase Data Structure ===\n")
+            for key, value in data.items():
+                print(f"\n{key}:")
+                print("-" * 40)
+                print(value)
+                print("-" * 40)
+            
+            return data
+        except Exception as e:
+            print(f"Error inspecting Firebase data: {e}")
+            traceback.print_exc()
+            return {"error": str(e)}
+
     @staticmethod
     def get_grid_info():
         """Get grid information"""

@@ -70,6 +70,12 @@ def get_floor(floor_id):
         }
         return jsonify(floor_data)
 
+@api.route('/debug/firebase')
+def debug_firebase():
+    """Debug endpoint to inspect Firebase data structure"""
+    data = FirebaseClient.debug_firebase_data()
+    return jsonify(data)
+
 @api.route('/visitors')
 def get_visitors():
     """API endpoint for visitors information"""

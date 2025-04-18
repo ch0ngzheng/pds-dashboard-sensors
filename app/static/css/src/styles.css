@@ -1,58 +1,134 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Import Tailwind base styles */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
 
 /* Custom component classes */
-@layer components {
-  .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-colors;
-  }
-  
-  .btn-primary {
-    @apply bg-blue-500 text-white hover:bg-blue-600;
-  }
-  
-  .card {
-    @apply bg-white rounded-lg shadow p-4;
-  }
-  
-  .status-badge {
-    @apply px-3 py-1 rounded-full text-sm font-medium;
-  }
-  
-  .status-optimal {
-    @apply bg-optimal text-white;
-  }
-  
-  .status-sub-optimal {
-    @apply bg-sub-optimal text-white;
-  }
-  
-  .status-critical {
-    @apply bg-critical text-white;
-  }
-  
-  .nav-link {
-    @apply flex items-center p-2 rounded-md hover:bg-gray-200;
-  }
-  
-  .nav-link-active {
-    @apply bg-gray-200;
-  }
-  
-  .floor-card {
-    @apply rounded-lg p-4 border-2 mb-3;
-  }
-  
-  .floor-optimal {
-    @apply border-optimal;
-  }
-  
-  .floor-sub-optimal {
-    @apply border-sub-optimal;
-  }
-  
-  .floor-critical {
-    @apply border-critical;
-  }
+.btn {
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+.btn-primary {
+  background-color: #3498db;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background-color: #217dbb;
+}
+
+.card {
+  background-color: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+}
+
+.status-badge {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.status-optimal {
+  color: #10B981;
+}
+
+.status-sub-optimal {
+  color: #F59E0B;
+}
+
+.status-critical {
+  color: #EF4444;
+}
+
+.status-optimal-bg {
+  background-color: #10B981;
+}
+
+.status-sub-optimal-bg {
+  background-color: #F59E0B;
+}
+
+.status-critical-bg {
+  background-color: #EF4444;
+}
+
+.status-optimal-border {
+  border-color: #10B981;
+}
+
+.status-sub-optimal-border {
+  border-color: #F59E0B;
+}
+
+.status-critical-border {
+  border-color: #EF4444;
+}
+
+.floor-card {
+  border-radius: 0.5rem;
+  padding: 1rem;
+  border-width: 2px;
+  margin-bottom: 0.75rem;
+}
+
+.floor-optimal {
+  border-color: #10B981;
+}
+
+.floor-sub-optimal {
+  border-color: #F59E0B;
+}
+
+.floor-critical {
+  border-color: #EF4444;
+}
+
+/* Navigation */
+.nav-link {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+}
+
+.nav-link:hover {
+  background-color: #E5E7EB;
+}
+
+.nav-link-active {
+  background-color: #E5E7EB;
+}
+
+.floor-card {
+  border-radius: 0.5rem;
+  padding: 1rem;
+  border-width: 2px;
+  margin-bottom: 0.75rem;
+}
+
+.floor-optimal {
+  border-color: #10B981;
+}
+
+.floor-sub-optimal {
+  border-color: #F59E0B;
+}
+
+.floor-critical {
+  border-color: #EF4444;
 }

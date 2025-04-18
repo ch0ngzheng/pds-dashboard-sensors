@@ -1,9 +1,128 @@
-from flask import Blueprint, render_template, jsonify, make_response
+from flask import Blueprint, render_template, jsonify, make_response, request, flash, redirect, url_for, session
 import traceback
 import json
+from datetime import datetime
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from app.firebase.firebase_client import FirebaseClient
+from app.utils.onboarding_utils import validate_name, validate_date, format_name, format_firebase_data
 
 main = Blueprint('main', __name__)
+
+# --- Onboarding routes ---
+@main.route('/onboarding/', methods=['GET'])
+def onboarding_index():
+    return render_template('onboarding/index.html')
+
+@main.route('/onboarding/register', methods=['POST'])
+def onboarding_register():
+    if request.method == 'POST':
+        first_name = request.form.get('firstName', '').strip()
+        last_name = request.form.get('lastName', '').strip()
+        date_of_birth = request.form.get('dateOfBirth', '').strip()
+        
+        # Validate first name
+        is_valid, message = validate_name(first_name)
+        if not is_valid:
+            flash(f'First name error: {message}', 'error')
+            return redirect(url_for('main.onboarding_index'))
+            
+        # Validate last name
+        is_valid, message = validate_name(last_name)
+        if not is_valid:
+            flash(f'Last name error: {message}', 'error')
+            return redirect(url_for('main.onboarding_index'))
+            
+        # Validate date of birth
+        is_valid, message, dob_obj = validate_date(date_of_birth)
+        if not is_valid:
+            flash(message, 'error')
+            return redirect(url_for('main.onboarding_index'))
+            
+        # Format names properly
+        first_name_formatted = format_name(first_name)
+        last_name_formatted = format_name(last_name)
+        
+        # Create visitor data dictionary
+        visitor_data = {
+            'firstName': first_name_formatted,
+            'lastName': last_name_formatted,
+            'dob': dob_obj.strftime('%Y-%m-%d')
+        }
+        
+        try:
+            # Store in session
+            session['visitor'] = visitor_data
+            
+            return redirect(url_for('main.onboarding_rfid_instructions'))
+            
+        except ValueError as e:
+            flash(f'Error processing data: {str(e)}', 'error')
+            return redirect(url_for('main.onboarding_index'))
+    
+    return redirect(url_for('main.onboarding_index'))
+
+@main.route('/onboarding/rfid-instructions', methods=['GET'])
+def onboarding_rfid_instructions():
+    # Check if visitor info exists in session
+    visitor = session.get('visitor')
+    if not visitor:
+        flash('Please complete the registration form first.', 'error')
+        return redirect(url_for('main.onboarding_index'))
+    
+    return render_template('onboarding/rfid_instructions.html', visitor=visitor)
+
+@main.route('/onboarding/submit', methods=['POST'])
+def onboarding_submit():
+    # Get form data
+    first_name = request.form.get('first_name')
+    last_name = request.form.get('last_name')
+    dob = request.form.get('dob')
+
+    # Basic validation
+    if not all([first_name, last_name, dob]):
+        flash('Please fill in all fields', 'error')
+        return redirect(url_for('main.onboarding_index'))
+
+    try:
+        # Generate user ID from name and DOB
+        # Format: First letter of first name + Last name + YYMMDD
+        dob_date = datetime.strptime(dob, '%Y-%m-%d')
+        user_id = f"{first_name[0]}{last_name}{dob_date.strftime('%y%m%d')}"
+
+        # Create visitor data
+        visitor_data = {
+            'first_name': first_name,
+            'last_name': last_name,
+            'dob': dob,
+            'name': f'{first_name} {last_name}',
+            'user_id': user_id
+        }
+
+        # Add visitor to Firebase
+        visitor_id = FirebaseClient.add_visitor(visitor_data)
+
+        # Add RFID write command
+        FirebaseClient.add_command({
+            'type': 'write_rfid',
+            'user_id': user_id,
+            'visitor_id': visitor_id,
+            'status': 'pending'
+        })
+
+        # Flash success message
+        flash('Registration successful!', 'success')
+
+        # Redirect to instructions page
+        return redirect(url_for('main.onboarding_rfid_instructions', visitor_id=visitor_id))
+
+    except Exception as e:
+        flash(f'Error during registration: {str(e)}', 'error')
+        return redirect(url_for('main.onboarding_index'))
+
+@main.route('/onboarding/success', methods=['GET'])
+def onboarding_success():
+    return render_template('onboarding/success.html')
+# --- End onboarding routes ---
 
 @main.route('/debug')
 def debug():

@@ -1,8 +1,33 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <Firebase_ESP_Client.h>
+
+
+
+// Function declarations
+void checkESPResponse();
+void sendHeartbeatToESP();
+
+// Firebase paths
+#define COMMANDS_PATH "/commands"
+#define SYSTEM_STATUS_PATH "/system/status"
+#define USERS_PATH "/users"
+#define TAGS_PATH "/tags"
+#define ROOMS_PATH "/rooms"
+
+// Global variables
+unsigned long lastHeartbeatSent = 0;
+unsigned long lastHeartbeatReceived = 0;
+String currentLocation = "unconfigured";
 #include <time.h>
 #include <Adafruit_NeoPixel.h>
+
+// Function declarations
+void logBootInfo();
+void connectToWiFi();
+void initializeTime();
+void initFirebase();
+void processSerialData();
 #include <EEPROM.h>
 
 // EEPROM configuration
@@ -33,11 +58,8 @@ char serialBuffer[BUFFER_SIZE];
 int bufferIndex = 0;
 
 // Enhanced Firebase paths
-#define USERS_PATH "/users"
 #define LOCATIONS_PATH "/locations"
 #define EVENTS_PATH "/events"
-#define TAGS_PATH "/tags"
-#define SYSTEM_STATUS_PATH "/system_status"
 
 // New visitors rooms path
 #define VISITORS_ROOMS_PATH "/energy_dashboard/visitors/rooms"
@@ -58,9 +80,9 @@ Adafruit_NeoPixel pixel(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 #define COLOR_WARNING pixel.Color(50, 50, 0)    // Yellow: Warning condition
 
 // NTP settings for timestamps
-const char* ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 0;      // GMT offset in seconds (adjust for your timezone)
-const int daylightOffset_sec = 0;  // Daylight savings time offset (adjust if needed)
+#define NTP_SERVER "pool.ntp.org"
+#define GMT_OFFSET_SEC 28800      // GMT+8 (Singapore)
+#define DAY_LIGHT_OFFSET_SEC 0
 
 // System status
 bool firebaseInitialized = false;
@@ -88,8 +110,10 @@ void sendResponse(bool success, uint16_t sequence = 0);
 String getFormattedTime();
 void setLED(uint32_t color, int blinkCount = 0, int blinkDuration = 200);
 void updateSystemStatus();
-bool initializeTime();
+void initializeTime();
 void logBootInfo();
+void checkNewCommands();
+void updateCommandStatus(const char* userId, const char* status);
 
 void setup() {
   // Initialize EEPROM
@@ -101,8 +125,8 @@ void setup() {
   // Initialize serial for debugging
   Serial.begin(115200);
   
-  // Initialize serial for communication with Arduino Mega
-  Serial1.begin(9600, SERIAL_8N1, 20, 21);  // RX=GPIO20, TX=GPIO21
+  // Initialize serial for communication with Arduino UNO
+  Serial1.begin(9600, SERIAL_8N1, 20, 21);  // RX=GPIO20, TX=GPIO21 for ESP32-C3 UART0
   
   // Initialize NeoPixel LED
   pixel.begin();
@@ -119,7 +143,8 @@ void setup() {
   connectToWiFi();
   
   // Configure time via NTP
-  if (initializeTime()) {
+  initializeTime();
+  if (time(nullptr) > 1000000000) {
     timeInitialized = true;
   } else {
     setLED(COLOR_WARNING, 3, 200);
@@ -137,224 +162,67 @@ void setup() {
   // Update system status
   updateSystemStatus();
   
-  // Send ready message to Mega
-  Serial1.println("ESP32:READY");
+  // Send ready message to UNO
+  Serial1.println(F("ESP32-READY"));
+  Serial1.flush(); // Make sure message is sent
+  Serial.println(F("Sent ESP32-READY to UNO"));
 }
 
-
-
 void loop() {
-  // Check WiFi connection every 30 seconds
-  if (millis() - lastWiFiCheck > 30000) {
-    if (WiFi.status() != WL_CONNECTED) {
-      setLED(COLOR_WIFI);
-      connectToWiFi();
+  // Check WiFi connection
+  if (WiFi.status() != WL_CONNECTED) {
+    connectToWiFi();
+  }
+  
+  // Check Firebase connection
+  if (!Firebase.ready()) {
+    if (millis() - lastFirebaseRetry > 5000) {
+      initFirebase();
+      lastFirebaseRetry = millis();
     }
+    return;
+  }
+  
+  // Process any incoming serial data
+  processSerialData();
+  
+  // Update system status periodically
+  if (millis() - lastWiFiCheck > 60000) {
+    updateSystemStatus();
     lastWiFiCheck = millis();
   }
   
-  // Process data from Arduino Mega
-  processSerialData();
+  // Check for new commands
+  checkNewCommands();
   
-  // Retry Firebase initialization if needed
-  if (!firebaseInitialized && millis() - lastFirebaseRetry > 60000) {
-    Serial.println("Retrying Firebase initialization...");
-    initFirebase();
-    lastFirebaseRetry = millis();
-  }
+  // Process any queued tags
+  checkESPResponse();
   
-  // Heartbeat indicator (short blue pulse every 5 seconds)
-  static unsigned long lastHeartbeat = 0;
-  if (millis() - lastHeartbeat > 5000) {
-    setLED(COLOR_IDLE, 1, 100);
-    lastHeartbeat = millis();
-    
-    // Send heartbeat to Mega
-    Serial1.println("HEARTBEAT_ACK");
+  // Send heartbeat if needed (every 10 seconds to match UNO)
+  if (millis() - lastHeartbeatSent > 10000) {
+    sendHeartbeatToESP();
+    lastHeartbeatSent = millis();
   }
-  
-  // Update system status every 5 minutes
-  static unsigned long lastStatusUpdate = 0;
-  if (millis() - lastStatusUpdate > 300000) {
-    updateSystemStatus();
-    lastStatusUpdate = millis();
-  }
-}
 
-void logBootInfo() {
-  // Read and increment boot count
-  uint32_t bootCount = EEPROM.readUInt(EEPROM_BOOT_COUNT_ADDR);
-  bootCount++;
-  EEPROM.writeUInt(EEPROM_BOOT_COUNT_ADDR, bootCount);
-  
-  // Store last reset time
-  uint32_t lastResetTime = EEPROM.readUInt(EEPROM_LAST_RESET_ADDR);
-  EEPROM.writeUInt(EEPROM_LAST_RESET_ADDR, millis());
-  
-  // Commit changes
-  EEPROM.commit();
-  
-  Serial.println("==== SYSTEM BOOT ====");
-  Serial.print("Boot count: ");
-  Serial.println(bootCount);
-  Serial.print("Last reset: ");
-  if (lastResetTime > 0) {
-    Serial.print(lastResetTime / 1000);
-    Serial.println(" seconds after previous boot");
-  } else {
-    Serial.println("First boot or EEPROM reset");
-  }
-  Serial.println("=====================");
-}
-
-bool initializeTime() {
-  // Configure time via NTP
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  
-  // Wait up to 10 seconds for time to be set
-  int retry = 0;
-  struct tm timeinfo;
-  while (!getLocalTime(&timeinfo) && retry < 10) {
-    Serial.println("Waiting for NTP time sync...");
-    delay(1000);
-    retry++;
+  // Check for heartbeat timeout (30 seconds)
+  if (millis() - lastHeartbeatReceived > 30000) {
+    // No heartbeat received for 30 seconds
+    setLED(COLOR_WARNING, 2, 200); // Flash yellow to indicate communication issue
+    Serial.println(F("WARNING: No heartbeat from UNO for >30s"));
   }
   
-  return (retry < 10);
-}
-
-void connectToWiFi() {
-  setLED(COLOR_WIFI);
-  
-  // Determine which WiFi to use
-  const char* ssid = useAlternateWiFi ? ALT_WIFI_SSID : WIFI_SSID;
-  const char* password = useAlternateWiFi ? ALT_WIFI_PASSWORD : WIFI_PASSWORD;
-  
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(ssid);
-  
-  WiFi.disconnect();
-  delay(100);
-  WiFi.begin(ssid, password);
-  
-  // Wait for connection with timeout
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    delay(500);
-    attempts++;
-    
-    // Blink cyan while connecting
-    if (attempts % 2 == 0) {
-      setLED(COLOR_WIFI);
-    } else {
-      setLED(COLOR_IDLE);
-    }
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    // Show success with green flash
-    setLED(COLOR_SUCCESS, 3, 100);
-    Serial.println("WiFi connected!");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    
-    // Reset connection attempts counter
-    connectionAttempts = 0;
-  } else {
-    // Show error with red flash
-    setLED(COLOR_ERROR, 3, 100);
-    Serial.println("WiFi connection failed");
-    
-    // Increment attempts and try alternate WiFi if needed
-    connectionAttempts++;
-    if (connectionAttempts >= 3) {
-      useAlternateWiFi = !useAlternateWiFi;
-      connectionAttempts = 0;
-      Serial.println("Switching to alternate WiFi settings");
-    }
-  }
-  
-  // Return to idle color
-  setLED(COLOR_IDLE);
-}
-
-void initFirebase() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Cannot initialize Firebase: WiFi not connected");
-    firebaseInitialized = false;
-    return;
-  }
-  
-  // Set the database URL
-  config.database_url = DATABASE_URL;
-  
-  // Use database secret authentication
-  config.signer.tokens.legacy_token = DATABASE_SECRET;
-  
-  // Enable auto-reconnect to Firebase
-  config.timeout.serverResponse = 10000;
-  
-  // Initialize the library with the Firebase config
-  Firebase.begin(&config, &auth);
-  
-  // Optional: Set database read timeout
-  Firebase.setDoubleDigits(5);
-  
-  // Check if initialization was successful
-  if (Firebase.ready()) {
-    firebaseInitialized = true;
-    Serial.println("Firebase initialized successfully");
-    
-    // Initialize system status node
-    FirebaseJson json;
-    json.set("status", "online");
-    json.set("start_time", getFormattedTime());
-    json.set("boot_count", EEPROM.readUInt(EEPROM_BOOT_COUNT_ADDR));
-    
-    Firebase.RTDB.setJSON(&fbdo, SYSTEM_STATUS_PATH, &json);
-  } else {
-    firebaseInitialized = false;
-    Serial.println("Firebase initialization failed");
-  }
-}
-
-void processSerialData() {
-  // Check if we have data from Arduino Mega
-  while (Serial1.available() > 0) {
-    char c = Serial1.read();
-    
-    // Check for end of message (newline)
-    if (c == '\n' || c == '\r') {
-      if (bufferIndex > 0) {
-        // Null-terminate the buffer
-        serialBuffer[bufferIndex] = '\0';
-        
-        // Process the complete message
-        processMessage(serialBuffer);
-        
-        // Reset buffer index
-        bufferIndex = 0;
-      }
-    } else if (bufferIndex < BUFFER_SIZE - 1) {
-      // Add character to buffer
-      serialBuffer[bufferIndex++] = c;
-    }
-  }
+  // Brief delay to prevent overwhelming the system
+  delay(10);
 }
 
 void processMessage(const char* message) {
-  // Briefly show purple when receiving message
-  setLED(COLOR_RECEIVE);
+  // Skip empty messages
+  if (!message || strlen(message) == 0) return;
   
-  // Check for heartbeat
-  if (strncmp(message, "HEARTBEAT:", 10) == 0) {
-    Serial1.println("HEARTBEAT_ACK");
-    setLED(COLOR_IDLE);
-    return;
-  }
-  
-  // Check for tag data format: TAG:{sequence},{checksum},EPC,ASCII,RSSI
+  // Parse the message
   if (strncmp(message, "TAG:", 4) == 0) {
+    // This is from MEGA - handle tag data
+    // Format: TAG:{sequence},{checksum},EPC,ASCII,RSSI
     String data = String(message + 4); // Skip "TAG:"
     
     // Parse the sequence number
@@ -393,19 +261,10 @@ void processMessage(const char* message) {
       // Flash purple to show we're processing
       setLED(COLOR_RECEIVE, 2, 100);
       
-      // Process the tag data
-      totalTagsProcessed++;
-      
       // Upload to Firebase
-      bool success = uploadTagToFirebase(epcHex, epcAscii, rssi);
+      bool success = uploadTagToFirebase(epcHex.c_str(), epcAscii.c_str(), rssi);
       
-      if (success) {
-        successfulUploads++;
-      } else {
-        failedUploads++;
-      }
-      
-      // Send acknowledgment back to Arduino Mega
+      // Send acknowledgment back to MEGA
       sendResponse(success, sequence);
       
       // Show success or error
@@ -414,16 +273,29 @@ void processMessage(const char* message) {
       } else {
         setLED(COLOR_ERROR, 1, 500);
       }
-    } else {
-      // Malformed data
-      Serial.println("Malformed tag data format");
-      setLED(COLOR_ERROR, 3, 100);
-      sendResponse(false, sequence);
     }
-  } else if (strncmp(message, "TEST:", 5) == 0) {
-    // Handle test messages
-    Serial1.println("ESP32:ACK");
-    setLED(COLOR_SUCCESS, 2, 100);
+  }
+  else if (strcmp(message, "READY") == 0) {
+    Serial.println(F("Arduino reports ready"));
+  }
+  else if (strcmp(message, "ACK") == 0) {
+    Serial.println(F("Arduino acknowledged"));
+  }
+  else if (strncmp(message, "SUCCESS:", 8) == 0) {
+    // This is from UNO - handle RFID write success
+    const char* userId = message + 8;
+    updateCommandStatus(userId, "completed");
+    setLED(COLOR_SUCCESS, 2, 200);
+  }
+  else if (strncmp(message, "ERROR:", 6) == 0) {
+    // This is from UNO - handle RFID write error
+    const char* userId = message + 6;
+    updateCommandStatus(userId, "failed");
+    setLED(COLOR_ERROR, 2, 200);
+  }
+  else {
+    Serial.print(F("Unknown message: "));
+    Serial.println(message);
   }
   
   // Return to idle state
@@ -431,6 +303,7 @@ void processMessage(const char* message) {
 }
 
 bool uploadTagToFirebase(const String& epcHex, const String& epcAscii, int rssi) {
+  bool additionalSuccess = true;
   if (!firebaseInitialized || WiFi.status() != WL_CONNECTED) {
     Serial.println("Cannot upload: Firebase not initialized or WiFi disconnected");
     return false;
@@ -456,32 +329,38 @@ bool uploadTagToFirebase(const String& epcHex, const String& epcAscii, int rssi)
   tagJson.set("ascii_text", epcAscii);
   tagJson.set("rssi", rssi);
   tagJson.set("timestamp", formattedTime);
-  tagJson.set("last_seen", (int)now);
-  
-  // Use room name for new structure
-  String locationId = ROOM_NAME;
-  
-  // Path for this specific tag
-  String tagPath = String(TAGS_PATH) + "/" + epcHex;
-  
-  // Additional operations success tracker
-  bool additionalSuccess = true;
   
   // Upload tag data to Firebase
+  String tagPath = "/tags/" + epcHex;
   bool tagSuccess = Firebase.RTDB.setJSON(&fbdo, tagPath.c_str(), &tagJson);
   
   if (!tagSuccess) {
-    Serial.print("Failed to update tag: ");
+    Serial.print("Failed to upload tag data: ");
     Serial.println(fbdo.errorReason().c_str());
+    return false;
   }
   
-  // Update user location (if we have a user ID)
-  if (userId.length() > 0) {
-    updateUserLocation(userId, ROOM_NAME);
-  }
+  // Update room user count
+  String roomPath = "/rooms/" + currentLocation;
   
-  // Log event
-  logEvent("tag_detected", epcHex, locationId);
+  // Get current room data
+  if (Firebase.RTDB.getJSON(&fbdo, roomPath.c_str())) {
+    FirebaseJson* roomJson = fbdo.jsonObjectPtr();
+    FirebaseJsonData activeUsers;
+    roomJson->get(activeUsers, "active_users");
+    
+    // Update room data
+    FirebaseJson updateJson;
+    updateJson.set("active_users", activeUsers.intValue + 1);
+    updateJson.set("last_update", (int)time(NULL));
+    
+    bool roomSuccess = Firebase.RTDB.updateNode(&fbdo, roomPath.c_str(), &updateJson);
+    if (!roomSuccess) {
+      Serial.print("Failed to update room data: ");
+      Serial.println(fbdo.errorReason().c_str());
+    }
+  }
+  logEvent("tag_detected", epcHex, currentLocation);
   
   // Update system statistics
   FirebaseJson statsJson;
@@ -627,6 +506,53 @@ String getFormattedTime() {
   return String(timeString);
 }
 
+void checkESPResponse() {
+  while (Serial1.available()) {
+    String response = Serial1.readStringUntil('\n');
+    response.trim();
+    
+    // Check for invalid characters
+    bool isValid = true;
+    for (unsigned int i = 0; i < response.length(); i++) {
+      if (response[i] < 32 || response[i] > 126) {
+        isValid = false;
+        break;
+      }
+    }
+    
+    if (!isValid) {
+      Serial.println(F("Received corrupted message, discarding"));
+      continue;
+    }
+    
+    if (response.startsWith("ACK:")) {
+      // Handle acknowledgment
+      String ackId = response.substring(4);
+      if (ackId == "HEARTBEAT") {
+        // Got heartbeat acknowledgment
+        lastHeartbeatReceived = millis();
+        Serial.println(F("UNO acknowledged heartbeat"));
+      } else {
+        Serial.print(F("Received ACK from UNO: "));
+        Serial.println(ackId);
+      }
+    } else if (response.startsWith("HEARTBEAT")) {
+      // Got heartbeat from UNO, send acknowledgment
+      Serial1.println(F("ACK:HEARTBEAT"));
+      Serial1.flush();
+      lastHeartbeatReceived = millis();
+      Serial.println(F("Received heartbeat from UNO"));
+    }
+  }
+}
+
+void sendHeartbeatToESP() {
+  Serial.println(F("Sending heartbeat to UNO..."));
+  Serial1.println(F("HEARTBEAT"));
+  Serial1.flush();
+  lastHeartbeatSent = millis();
+}
+
 void updateSystemStatus() {
   if (!firebaseInitialized) return;
   
@@ -650,6 +576,310 @@ void updateSystemStatus() {
   if (!success) {
     Serial.print("Failed to update system status: ");
     Serial.println(fbdo.errorReason().c_str());
+  }
+}
+
+void updateCommandStatus(const char* commandId, const char* status) {
+  if (!firebaseInitialized) return;
+  
+  String commandPath = String(COMMANDS_PATH) + "/" + commandId + "/status";
+  if (!Firebase.RTDB.setString(&fbdo, commandPath.c_str(), status)) {
+    Serial.print("Failed to update command status: ");
+    Serial.println(fbdo.errorReason().c_str());
+  }
+}
+
+// Update the status of all pending write_rfid commands in Firebase
+void updatePendingWriteCommands(const char* newStatus) {
+  if (!firebaseInitialized) return;
+
+  // Get all commands
+  if (Firebase.RTDB.getJSON(&fbdo, COMMANDS_PATH)) {
+    FirebaseJson *json = fbdo.jsonObjectPtr();
+    if (!json) return;
+
+    size_t len = json->iteratorBegin();
+    String key, value;
+    int type;
+    
+    for (size_t i = 0; i < len; i++) {
+      json->iteratorGet(i, type, key, value);
+      
+      // Skip non-object entries
+      if (type != FirebaseJson::JSON_OBJECT) continue;
+      
+      FirebaseJsonData statusData;
+      FirebaseJsonData typeData;
+      FirebaseJson commandJson;
+      commandJson.setJsonData(value);
+      commandJson.get(statusData, "status");
+      commandJson.get(typeData, "type");
+      
+      // Only update processing write_rfid commands
+      if (!statusData.success || !typeData.success) continue;
+      
+      if (typeData.stringValue == "write_rfid" && 
+          statusData.stringValue == "processing") {
+        
+        // Update command status
+        String statusPath = String(COMMANDS_PATH) + "/" + key + "/status";
+        Firebase.RTDB.setString(&fbdo, statusPath.c_str(), newStatus);
+        
+        // Update timestamp
+        String timestampPath = String(COMMANDS_PATH) + "/" + key + "/updated_at";
+        Firebase.RTDB.setInt(&fbdo, timestampPath.c_str(), (int)time(NULL));
+        
+        Serial.print("Updated write_rfid command ");
+        Serial.print(key);
+        Serial.print(" to status: ");
+        Serial.println(newStatus);
+      }
+    }
+    json->iteratorEnd();
+  }
+}
+
+void checkNewCommands() {
+  if (!firebaseInitialized) return;
+
+  // Get all commands
+  if (Firebase.RTDB.getJSON(&fbdo, COMMANDS_PATH)) {
+    FirebaseJson *json = fbdo.jsonObjectPtr();
+    if (!json) return;
+
+    size_t len = json->iteratorBegin();
+    String key, value;
+    int type;
+    
+    for (size_t i = 0; i < len; i++) {
+      json->iteratorGet(i, type, key, value);
+      
+      // Skip non-object entries
+      if (type != FirebaseJson::JSON_OBJECT) continue;
+      
+      FirebaseJsonData statusData;
+      FirebaseJson commandJson;
+      commandJson.setJsonData(value);
+      commandJson.get(statusData, "status");
+      
+      // Only process pending commands
+      if (!statusData.success || statusData.stringValue != "pending") continue;
+      
+      FirebaseJsonData typeData;
+      FirebaseJsonData userIdData;
+      commandJson.get(typeData, "type");
+      commandJson.get(userIdData, "user_id");
+      
+      if (!typeData.success || !userIdData.success) continue;
+      
+      // Handle write_rfid command
+      if (typeData.stringValue == "write_rfid") {
+        // Send write command to UNO
+        String command = "WRITE:" + userIdData.stringValue;
+        Serial1.println(command);
+        Serial1.flush(); // Make sure command is sent
+        Serial.println("Sent to UNO: " + command); // Debug output
+        
+        // Update command status
+        updateCommandStatus(key.c_str(), "processing");
+        
+        // Update timestamp
+        String timestampPath = String(COMMANDS_PATH) + "/" + key + "/updated_at";
+        Firebase.RTDB.setInt(&fbdo, timestampPath.c_str(), (int)time(NULL));
+      }
+    }
+    json->iteratorEnd();
+  }
+}
+
+void logBootInfo() {
+  Serial.println("\n=== ESP32 RFID System ===\n");
+  Serial.println("Version: 1.0.0");
+  Serial.println("Build Date: " __DATE__ " " __TIME__);
+  Serial.println("\nInitializing...");
+}
+
+void connectToWiFi() {
+  if (WiFi.status() == WL_CONNECTED) return;
+  
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi Connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+    setLED(COLOR_WIFI, 1, 500); // Blue flash for WiFi connection
+  } else {
+    Serial.println("\nWiFi Connection Failed!");
+    setLED(COLOR_ERROR, 3, 200); // Red flashes for error
+  }
+}
+
+void initializeTime() {
+  configTime(GMT_OFFSET_SEC, DAY_LIGHT_OFFSET_SEC, NTP_SERVER);
+  
+  Serial.print("Waiting for time sync");
+  int attempts = 0;
+  while (time(nullptr) < 1000000000 && attempts < 10) {
+    Serial.print(".");
+    delay(500);
+    attempts++;
+  }
+  Serial.println();
+  
+  if (time(nullptr) > 1000000000) {
+    Serial.println("Time synchronized!");
+  } else {
+    Serial.println("Time sync failed!");
+  }
+}
+
+void initFirebase() {
+  if (firebaseInitialized) return;
+  
+  /* Initialize Firebase */
+  config.database_url = DATABASE_URL;
+  config.signer.tokens.legacy_token = DATABASE_SECRET;
+  
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+  
+  if (Firebase.ready()) {
+    Serial.println("Firebase authentication successful");
+    firebaseInitialized = true;
+    setLED(COLOR_SUCCESS, 1, 500); // Green flash for Firebase init
+  } else {
+    Serial.println("Firebase authentication failed");
+    setLED(COLOR_ERROR, 3, 200); // Red flashes for error
+  }
+}
+
+void processSerialData() {
+  static unsigned long lastDebugTime = 0;
+  const unsigned long DEBUG_INTERVAL = 5000;  // Debug messages every 5 seconds
+  static char buffer[128] = {0};  // Increased buffer size
+  static int bufferIndex = 0;
+  
+  while (Serial1.available()) {
+    char c = Serial1.read();
+    
+    // Add character to buffer if there's space
+    if (bufferIndex < sizeof(buffer) - 1) {
+      buffer[bufferIndex++] = c;
+    }
+    
+    // Process complete message on newline
+    if (c == '\n' || c == '\r' || bufferIndex >= sizeof(buffer) - 1) {
+      buffer[bufferIndex] = '\0';  // Null terminate
+      String data = String(buffer);
+      data.trim();
+      
+      // Only process non-empty messages
+      if (data.length() > 0) {
+        unsigned long currentTime = millis();
+        bool shouldPrintDebug = (currentTime - lastDebugTime) >= DEBUG_INTERVAL;
+        
+        if (shouldPrintDebug) {
+          lastDebugTime = currentTime;
+          Serial.print("UNO message: ");
+          Serial.println(data);
+        }
+        
+        // Process heartbeat messages - IMPORTANT FOR UNO-ESP CONNECTIVITY
+        if (data.indexOf("HEARTBEAT") >= 0) {
+          // Now handles MEGA-style "HEARTBEAT:timestamp" format
+          // Send standard HEARTBEAT_ACK response that UNO is expecting
+          Serial1.println("HEARTBEAT_ACK");
+          Serial1.flush(); // Ensure it's sent immediately
+          
+          // Also send ESP32:READY to confirm connection status
+          Serial1.println("ESP32:READY");
+          Serial1.flush();
+          
+          // Add an explicit ACK for the specific heartbeat format
+          if (data.indexOf(":") > 0) {
+            String timestamp = data.substring(data.indexOf(":") + 1);
+            Serial1.println("ACK:HEARTBEAT:" + timestamp);
+            Serial1.flush();
+          }
+          
+          if (shouldPrintDebug) {
+            Serial.println("Heartbeat acknowledged");
+          }
+        }
+        else if (data.startsWith("ACK:")) {
+          int colonPos = data.indexOf(':');
+          if (colonPos > 0 && colonPos < data.length() - 1) {
+            // Handle tag write acknowledgments
+            if (data.indexOf("TAG_WRITTEN") > 0) {
+              Serial.println("Tag was successfully written");
+              
+              // Update any pending commands to completed
+              updatePendingWriteCommands("completed");
+              
+              // Visual confirmation
+              setLED(COLOR_SUCCESS, 3, 200);
+            }
+          }
+        }
+        else if (data.startsWith("NAK:")) {
+          if (data.indexOf("TAG_WRITE_FAILED") > 0 || data.indexOf("TAG_AUTH_FAILED") > 0) {
+            Serial.println("Tag write operation failed");
+            
+            // Update pending commands to failed
+            updatePendingWriteCommands("failed");
+            
+            // Visual indication of failure
+            setLED(COLOR_ERROR, 3, 200);
+          }
+        }
+        // Process tag data
+        else if (data.startsWith("TAG:")) {
+          // Format: TAG:{sequence},{checksum},EPC,ASCII,RSSI
+          int firstComma = data.indexOf(',', 4);
+          int secondComma = data.indexOf(',', firstComma + 1);
+          int thirdComma = data.indexOf(',', secondComma + 1);
+          int fourthComma = data.indexOf(',', thirdComma + 1);
+          
+          if (firstComma > 0 && secondComma > 0 && thirdComma > 0 && fourthComma > 0) {
+            // Extract tag data
+            int sequence = data.substring(4, firstComma).toInt();
+            String epcHex = data.substring(secondComma + 1, thirdComma);
+            String epcAscii = data.substring(thirdComma + 1, fourthComma);
+            int rssi = data.substring(fourthComma + 1).toInt();
+            
+            // Always ACK immediately to prevent UNO from getting stuck
+            Serial1.print("ACK:");
+            Serial1.println(sequence);
+            Serial1.flush();
+            
+            // Process the tag data
+            if (epcHex.length() > 0 && epcAscii.length() > 0) {
+              setLED(COLOR_RECEIVE, 1, 200);
+              Serial.println("Processing tag: " + epcHex);
+              
+              if (uploadTagToFirebase(epcHex, epcAscii, rssi)) {
+                setLED(COLOR_SUCCESS, 1, 200);
+              } else {
+                setLED(COLOR_ERROR, 1, 200);
+              }
+            }
+          }
+        }
+      }
+      
+      // Reset buffer
+      bufferIndex = 0;
+      memset(buffer, 0, sizeof(buffer));
+    }
   }
 }
 

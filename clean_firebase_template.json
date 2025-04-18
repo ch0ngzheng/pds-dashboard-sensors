@@ -1,0 +1,101 @@
+{
+  "commands": {},
+  "energy_dashboard": {
+    "appliances": {
+      "app1": {
+        "consumption": 0.12,
+        "name": "TV",
+        "room_id": "room1",
+        "state": "on",
+        "type": "electronics"
+      }
+    },
+    "battery": {
+      "capacity": 20,
+      "charging_rate": 22.5,
+      "current_power": -6.7,
+      "discharging_rate": 29.2,
+      "health": 92,
+      "life": 8,
+      "percentage": 75,
+      "solar_active": true
+    },
+    "floors": {
+      "floor1": {
+        "consumption": 12,
+        "name": "1st Floor",
+        "status": "optimal"
+      },
+      "floor2": {
+        "consumption": 15,
+        "name": "2nd Floor",
+        "status": "sub-optimal"
+      },
+      "floor3": {
+        "consumption": 2.2,
+        "name": "3rd Floor",
+        "status": "critical"
+      }
+    },
+    "grid": {
+      "connected": true,
+      "purchased": 120,
+      "revenue": 25.5,
+      "sold": 45
+    },
+    "notifications": {
+      "notif1": {
+        "action": "Check Battery",
+        "action_url": "/battery",
+        "message": "Battery level below 20%",
+        "priority": "high",
+        "timestamp": "2025-04-09T14:30:00Z",
+        "title": "Battery Low"
+      },
+      "notif2": {
+        "action": "Tip",
+        "message": "It will be sunny the next week! Save electricity by utilizing natural light!",
+        "timestamp": "2025-04-11T14:30:00Z",
+        "title": "Save Energy"
+      }
+    },
+    "rooms": {
+      "room1": {
+        "avg_consumption": 12.3,
+        "consumption": 1.5,
+        "efficiency": 78,
+        "floor_id": "floor1",
+        "name": "Living Room"
+      }
+    },
+    "visitors": {
+      "rooms": {},
+      "total": 0
+    }
+  },
+  "events": {},
+  "system": {
+    "status": {
+      "free_heap": 0,
+      "ip_address": "",
+      "last_update": "2025-04-18 18:15:41",
+      "status": "online",
+      "uptime_seconds": 0,
+      "wifi_ssid": "",
+      "wifi_strength": 0
+    }
+  },
+  "system_status": {
+    "boot_count": 0,
+    "free_heap": 0,
+    "ip_address": "",
+    "last_update": "2025-04-18 18:15:41",
+    "start_time": "2025-04-18 18:15:41",
+    "status": "online",
+    "uptime_seconds": 0,
+    "wifi_ssid": "",
+    "wifi_strength": 0
+  },
+  "tags": {},
+  "visitors": {}
+}

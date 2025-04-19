@@ -31,16 +31,28 @@ def parse_args():
 def init_firebase():
     """Initialize Firebase connection"""
     print("Initializing Firebase connection...")
-    cred_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-                         "app", "firebase", "serviceAccountKey.json")
-
-    if not os.path.exists(cred_path):
+    
+    # Use the same environment variables as your main application
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    cred_path = os.environ.get('FIREBASE_CREDENTIALS_PATH')
+    firebase_url = os.environ.get('FIREBASE_DATABASE_URL')
+    
+    print(f"Credentials path: {cred_path}")
+    print(f"Database URL: {firebase_url}")
+    
+    if not cred_path or not os.path.exists(cred_path):
         print(f"Service account key not found at {cred_path}")
-        print("Please ensure you have a valid serviceAccountKey.json file in the app/firebase directory")
+        print("Please ensure you have set the FIREBASE_CREDENTIALS_PATH environment variable correctly")
+        sys.exit(1)
+        
+    if not firebase_url:
+        print("Firebase database URL not set")
+        print("Please ensure you have set the FIREBASE_DATABASE_URL environment variable")
         sys.exit(1)
 
     cred = credentials.Certificate(cred_path)
-    firebase_url = os.environ.get('FIREBASE_DATABASE_URL', 'https://your-firebase-url.firebaseio.com/')
     firebase_admin.initialize_app(cred, {'databaseURL': firebase_url})
     print("Firebase connection initialized.")
 

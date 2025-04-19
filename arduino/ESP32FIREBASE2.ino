@@ -115,6 +115,21 @@ void logBootInfo();
 void checkNewCommands();
 void updateCommandStatus(const char* userId, const char* status);
 
+// Custom debug function that sends to both Serial and UNO
+void debugLog(const String& msg, bool addNewline = true) {
+  // Send to debug Serial
+  if (addNewline) {
+    Serial.println(msg);
+  } else {
+    Serial.print(msg);
+  }
+  
+  // Send to UNO with special prefix
+  String unoMsg = "DEBUG:" + msg;
+  Serial1.println(unoMsg);
+  Serial1.flush(); // Make sure message is sent
+}
+
 void setup() {
   // Initialize EEPROM
   EEPROM.begin(EEPROM_SIZE);
@@ -127,7 +142,7 @@ void setup() {
   
   // Initialize serial for communication with Arduino (UNO/MEGA)
   Serial1.begin(9600, SERIAL_8N1, 20, 21);  // RX=GPIO20, TX=GPIO21 for ESP32-C3 UART0
-  Serial.println("Serial1 initialized for Arduino communication: 9600 baud on pins RX=20, TX=21");
+  debugLog("Serial1 initialized for Arduino communication: 9600 baud on pins RX=20, TX=21");
   
   // Initialize NeoPixel LED
   pixel.begin();
@@ -149,7 +164,7 @@ void setup() {
     timeInitialized = true;
   } else {
     setLED(COLOR_WARNING, 3, 200);
-    Serial.println("WARNING: Could not initialize time via NTP");
+    debugLog("WARNING: Could not initialize time via NTP");
   }
   
   // Initialize Firebase
@@ -166,7 +181,7 @@ void setup() {
   // Send ready message to Arduino
   Serial1.println(F("ESP:READY"));
   Serial1.flush(); // Make sure message is sent
-  Serial.println(F("Sent ESP:READY to Arduino"));
+  debugLog(F("Sent ESP:READY to Arduino"));
 }
 
 void loop() {
@@ -203,7 +218,7 @@ void loop() {
   if (millis() - lastHeartbeatReceived > 30000) {
     // No heartbeat received for 30 seconds
     setLED(COLOR_WARNING, 2, 200); // Flash yellow to indicate communication issue
-    Serial.println(F("WARNING: No heartbeat from UNO for >30s"));
+    debugLog(F("WARNING: No heartbeat from UNO for >30s"));
   }
   
   // Brief delay to prevent overwhelming the system
@@ -665,11 +680,11 @@ void updatePendingWriteCommands(const char* newStatus) {
 
 void checkNewCommands() {
   if (!firebaseInitialized) {
-    Serial.println("Firebase not initialized, can't check commands");
+    debugLog("Firebase not initialized, can't check commands");
     return;
   }
 
-  Serial.println("Checking for new commands at path: " + String(COMMANDS_PATH));
+  debugLog("Checking for new commands at path: " + String(COMMANDS_PATH));
   // Get all commands
   if (Firebase.RTDB.getJSON(&fbdo, COMMANDS_PATH)) {
     FirebaseJson *json = fbdo.jsonObjectPtr();
@@ -725,8 +740,7 @@ void checkNewCommands() {
       Serial1.println(command);
       Serial1.flush();
       
-      Serial.print("[WRITE] Sent to UNO: ");
-      Serial.println(command);
+      debugLog("[WRITE] Sent to UNO: " + String(command));
       
       // Update command status
       updateCommandStatus(key.c_str(), "processing");
@@ -803,11 +817,11 @@ void initFirebase() {
   Firebase.reconnectWiFi(true);
   
   if (Firebase.ready()) {
-    Serial.println("Firebase authentication successful");
+    debugLog("Firebase authentication successful");
     firebaseInitialized = true;
     setLED(COLOR_SUCCESS, 1, 500); // Green flash for Firebase init
   } else {
-    Serial.println("Firebase authentication failed");
+    debugLog("Firebase authentication failed");
     setLED(COLOR_ERROR, 3, 200); // Red flashes for error
   }
 }

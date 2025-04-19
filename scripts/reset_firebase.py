@@ -6,28 +6,88 @@ import os
 import sys
 import datetime
 
-# Initialize Firebase with your service account
-# You'll need to have a service account key file
-cred_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-                       "app", "firebase", "serviceAccountKey.json")
-
-if not os.path.exists(cred_path):
-    print(f"Service account key not found at {cred_path}")
-    print("Please ensure you have a valid serviceAccountKey.json file in the app/firebase directory")
+# Initialize Firebase using environment variables
+try:
+    # First try with environment variables (preferred method)
+    from dotenv import load_dotenv
+    load_dotenv()  # Load environment variables from .env file if present
+    
+    # Get credentials from environment variables
+    cred_path = os.environ.get('FIREBASE_CREDENTIALS_PATH')
+    firebase_url = os.environ.get('FIREBASE_DATABASE_URL')
+    
+    if cred_path and os.path.exists(cred_path):
+        # Use credentials file from environment variable
+        cred = credentials.Certificate(cred_path)
+        print(f"Using Firebase credentials from environment: {cred_path}")
+    elif 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+        # Use default credentials mechanism
+        cred = None  # Use application default credentials
+        print("Using application default credentials")
+    else:
+        # Fallback to local file
+        local_cred_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
+                            "app", "firebase", "serviceAccountKey.json")
+        
+        if os.path.exists(local_cred_path):
+            cred = credentials.Certificate(local_cred_path)
+            print(f"Using local credentials file: {local_cred_path}")
+        else:
+            print("No Firebase credentials found. Please set FIREBASE_CREDENTIALS_PATH environment variable")
+            print("or place serviceAccountKey.json in the app/firebase directory.")
+            sys.exit(1)
+    
+    # Get the database URL
+    if not firebase_url:
+        firebase_url = 'https://pds-studio-default-rtdb.asia-southeast1.firebasedatabase.app'  # Default URL
+        print(f"No database URL specified in environment. Using default: {firebase_url}")
+    else:
+        print(f"Using database URL from environment: {firebase_url}")
+        
+except Exception as e:
+    print(f"Error initializing Firebase: {e}")
     sys.exit(1)
-
-cred = credentials.Certificate(cred_path)
-
-# Get Firebase URL from environment or use default for development
-firebase_url = os.environ.get('FIREBASE_DATABASE_URL', 'https://your-firebase-url.firebaseio.com/')
 
 firebase_admin.initialize_app(cred, {
     'databaseURL': firebase_url
 })
 
 # Clean database structure - this maintains the structure but removes all test data
+# Use the optimized structure for new clean database
 clean_db = {
-    "commands": {},
+    "commands": {
+        "write_rfid": {},
+        "read_rfid": {}
+    },
+    "people": {},
+    "tags": {},
+    "tag_readings": {},
+    "locations": {
+        "living-room": {
+            "name": "Living Room",
+            "description": "Main living area with RFID sensor",
+            "floor_id": "floor1",
+            "occupants": {},
+            "last_update": int(datetime.datetime.now().timestamp()),
+            "status": "active"
+        },
+        "kitchen": {
+            "name": "Kitchen",
+            "description": "Cooking and dining area",
+            "floor_id": "floor1",
+            "occupants": {},
+            "last_update": int(datetime.datetime.now().timestamp()),
+            "status": "active"
+        },
+        "studio": {
+            "name": "Studio",
+            "description": "Creative workspace",
+            "floor_id": "floor2",
+            "occupants": {},
+            "last_update": int(datetime.datetime.now().timestamp()),
+            "status": "active"
+        }
+    },
     "energy_dashboard": {
         "appliances": {
             "app1": {
@@ -113,19 +173,21 @@ clean_db = {
             "wifi_strength": 0
         }
     },
-    "system_status": {
-        "boot_count": 0,
-        "free_heap": 0,
-        "ip_address": "",
-        "last_update": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "start_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "status": "online",
-        "uptime_seconds": 0,
-        "wifi_ssid": "",
-        "wifi_strength": 0
+    "system": {
+        "current": {
+            "boot_count": 0,
+            "free_heap": 0,
+            "ip_address": "",
+            "last_update": int(datetime.datetime.now().timestamp()),
+            "start_time": int(datetime.datetime.now().timestamp()),
+            "status": "online",
+            "uptime_seconds": 0,
+            "wifi_ssid": "",
+            "wifi_strength": 0
+        },
+        "history": {}
     },
-    "tags": {},
-    "visitors": {}
+    "rooms": {}  # Keep for backward compatibility
 }
 
 # Option to save current database as backup
@@ -152,35 +214,73 @@ def export_clean_template():
     with open('clean_firebase_template.json', 'w') as f:
         json.dump(clean_db, f, indent=2)
     print(f"Clean template saved to clean_firebase_template.json")
+    
+    # Export optimized template separately (for documentation)
+    with open('optimized_firebase_template.json', 'w') as f:
+        clean_optimized = {
+            "commands": clean_db["commands"],
+            "people": clean_db["people"],
+            "tags": clean_db["tags"],
+            "tag_readings": clean_db["tag_readings"],
+            "locations": clean_db["locations"],
+            "system": clean_db["system"]
+        }
+        json.dump(clean_optimized, f, indent=2)
+    print(f"Optimized template saved to optimized_firebase_template.json")
 
 # Main menu
 def main():
+    # Check if command line arguments were provided
+    if len(sys.argv) > 1:
+        choice = sys.argv[1]
+        if choice == '1' or choice == 'backup':
+            backup_database()
+        elif choice == '2' or choice == 'reset':
+            # Automatically confirm when using CLI mode
+            print("Performing database reset...")
+            backup_database()  # Always backup before reset
+            reset_database()
+        elif choice == '3' or choice == 'export':
+            export_clean_template()
+        else:
+            print("Invalid option. Valid options are:")
+            print("1 or backup: Backup current database")
+            print("2 or reset: Reset database with clean template")
+            print("3 or export: Export clean template file (no changes to database)")
+        return
+    
+    # Interactive mode
     print("\n===== Firebase Database Reset Tool =====")
     print("1. Backup current database")
     print("2. Reset database with clean template")
     print("3. Export clean template file (no changes to database)")
     print("4. Exit")
     
-    choice = input("\nSelect an option (1-4): ")
-    
-    if choice == '1':
-        backup_database()
-        main()
-    elif choice == '2':
-        confirm = input("Are you sure you want to reset the database? This cannot be undone! (y/n): ")
-        if confirm.lower() == 'y':
-            backup_database()  # Always backup before reset
-            reset_database()
-        main()
-    elif choice == '3':
-        export_clean_template()
-        main()
-    elif choice == '4':
-        print("Exiting...")
-        sys.exit(0)
-    else:
-        print("Invalid option, please try again.")
-        main()
+    try:
+        choice = input("\nSelect an option (1-4): ")
+        
+        if choice == '1':
+            backup_database()
+            main()
+        elif choice == '2':
+            confirm = input("Are you sure you want to reset the database? This cannot be undone! (y/n): ")
+            if confirm.lower() == 'y':
+                backup_database()  # Always backup before reset
+                reset_database()
+            main()
+        elif choice == '3':
+            export_clean_template()
+            main()
+        elif choice == '4':
+            print("Exiting...")
+            sys.exit(0)
+        else:
+            print("Invalid option, please try again.")
+            main()
+    except EOFError:
+        print("\nNo input detected. Try using command line arguments:")
+        print("python reset_firebase.py 2" + " (to reset database)")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

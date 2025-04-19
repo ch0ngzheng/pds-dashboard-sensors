@@ -256,6 +256,12 @@ void checkESPResponse() {
             digitalWrite(13, LOW);
             consecutiveCommErrors++;
         }
+        // Handle debug messages from ESP32
+        else if (response.startsWith("DEBUG:")) {
+            String debugMsg = response.substring(6); // Skip "DEBUG:"
+            Serial.print("[ESP32] ");
+            Serial.println(debugMsg);
+        }
         // Handle WRITE commands from webapp via ESP32
         else if (response.startsWith("WRITE:")) {
             String userData = response.substring(6); // Skip "WRITE:"

@@ -5,17 +5,18 @@
 
 
 // Function declarations
-void checkESPResponse();
-void sendHeartbeatToESP();
+void checkUNOResponse();
 
-// Firebase paths
-#define COMMANDS_PATH "/commands"
-#define SYSTEM_STATUS_PATH "/system/status"
-#define USERS_PATH "/users"
+// Firebase paths - updated for optimized database structure
+#define COMMANDS_PATH "/commands/write_rfid"
+#define SYSTEM_STATUS_PATH "/system/current"
+#define PEOPLE_PATH "/people"
 #define TAGS_PATH "/tags"
-#define ROOMS_PATH "/rooms"
+#define TAG_READINGS_PATH "/tag_readings"
+#define LOCATIONS_PATH "/locations"
 
 // Global variables
+bool espReady = false;
 unsigned long lastHeartbeatSent = 0;
 unsigned long lastHeartbeatReceived = 0;
 String currentLocation = "unconfigured";
@@ -57,11 +58,10 @@ FirebaseConfig config;
 char serialBuffer[BUFFER_SIZE];
 int bufferIndex = 0;
 
-// Enhanced Firebase paths
-#define LOCATIONS_PATH "/locations"
-#define EVENTS_PATH "/events"
+// Additional firebase paths
+#define EVENTS_PATH "/tag_readings"
 
-// New visitors rooms path
+// For backward compatibility with energy dashboard
 #define VISITORS_ROOMS_PATH "/energy_dashboard/visitors/rooms"
 #define ROOM_NAME "Living Room"
 #define USER_TIMEOUT_SECONDS 60 // Remove user if not seen for 60 seconds
@@ -76,7 +76,7 @@ Adafruit_NeoPixel pixel(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 #define COLOR_SUCCESS pixel.Color(0, 50, 0)     // Green: Successfully uploaded to Firebase
 #define COLOR_ERROR   pixel.Color(50, 0, 0)     // Red: Error occurred
 #define COLOR_WIFI    pixel.Color(0, 50, 50)    // Cyan: WiFi connecting
-#define COLOR_RECEIVE pixel.Color(50, 0, 50)    // Purple: Received data from Mega
+#define COLOR_RECEIVE pixel.Color(50, 0, 50)    // Purple: Received data from Arduino
 #define COLOR_WARNING pixel.Color(50, 50, 0)    // Yellow: Warning condition
 
 // NTP settings for timestamps
@@ -125,8 +125,9 @@ void setup() {
   // Initialize serial for debugging
   Serial.begin(115200);
   
-  // Initialize serial for communication with Arduino UNO
+  // Initialize serial for communication with Arduino (UNO/MEGA)
   Serial1.begin(9600, SERIAL_8N1, 20, 21);  // RX=GPIO20, TX=GPIO21 for ESP32-C3 UART0
+  Serial.println("Serial1 initialized for Arduino communication: 9600 baud on pins RX=20, TX=21");
   
   // Initialize NeoPixel LED
   pixel.begin();
@@ -162,10 +163,10 @@ void setup() {
   // Update system status
   updateSystemStatus();
   
-  // Send ready message to UNO
-  Serial1.println(F("ESP32-READY"));
+  // Send ready message to Arduino
+  Serial1.println(F("ESP:READY"));
   Serial1.flush(); // Make sure message is sent
-  Serial.println(F("Sent ESP32-READY to UNO"));
+  Serial.println(F("Sent ESP:READY to Arduino"));
 }
 
 void loop() {
@@ -195,14 +196,8 @@ void loop() {
   // Check for new commands
   checkNewCommands();
   
-  // Process any queued tags
-  checkESPResponse();
-  
-  // Send heartbeat if needed (every 10 seconds to match UNO)
-  if (millis() - lastHeartbeatSent > 10000) {
-    sendHeartbeatToESP();
-    lastHeartbeatSent = millis();
-  }
+  // Process any queued tags and heartbeats from UNO
+  checkUNOResponse();
 
   // Check for heartbeat timeout (30 seconds)
   if (millis() - lastHeartbeatReceived > 30000) {
@@ -221,7 +216,7 @@ void processMessage(const char* message) {
   
   // Parse the message
   if (strncmp(message, "TAG:", 4) == 0) {
-    // This is from MEGA - handle tag data
+    // This is from UNO - handle tag data
     // Format: TAG:{sequence},{checksum},EPC,ASCII,RSSI
     String data = String(message + 4); // Skip "TAG:"
     
@@ -303,185 +298,216 @@ void processMessage(const char* message) {
 }
 
 bool uploadTagToFirebase(const String& epcHex, const String& epcAscii, int rssi) {
-  bool additionalSuccess = true;
+  if (epcHex.isEmpty() || rssi <= 0) {
+    Serial.println("Invalid tag data");
+    return false;
+  }
+
   if (!firebaseInitialized || WiFi.status() != WL_CONNECTED) {
     Serial.println("Cannot upload: Firebase not initialized or WiFi disconnected");
     return false;
   }
   
-  // Get current timestamp
-  String formattedTime = getFormattedTime();
+  // Create timestamp and date values
+  String timestamp = getFormattedTime();
   time_t now;
   time(&now);
+  unsigned long unixTime = (unsigned long)now;
   
-  // Extract user ID from ASCII text if available
-  // Format is expected to be FirstInitialLastName+DOB like "JDoe000120"
-  String userId = "";
-  if (epcAscii.length() > 0) {
-    userId = epcAscii;
-  } else {
-    userId = "unknown_" + epcHex.substring(0, 8);
-  }
+  // Format: YYYY-MM-DD
+  char dateStr[11];
+  strftime(dateStr, sizeof(dateStr), "%Y-%m-%d", localtime(&now));
+  String dateKey = String(dateStr);
   
-  // Create JSON for the tag data
+  // Prepare JSON payload for tag data
   FirebaseJson tagJson;
   tagJson.set("epc", epcHex);
   tagJson.set("ascii_text", epcAscii);
-  tagJson.set("rssi", rssi);
-  tagJson.set("timestamp", formattedTime);
-  
+  tagJson.set("owner_id", ""); // Will be linked if found
+  tagJson.set("last_read/timestamp", (int)unixTime);
+  tagJson.set("last_read/location", currentLocation);
+  tagJson.set("last_read/rssi", rssi);
+
   // Upload tag data to Firebase
-  String tagPath = "/tags/" + epcHex;
+  String tagPath = TAGS_PATH;
+  tagPath += "/" + epcHex;
   bool tagSuccess = Firebase.RTDB.setJSON(&fbdo, tagPath.c_str(), &tagJson);
-  
-  if (!tagSuccess) {
-    Serial.print("Failed to upload tag data: ");
-    Serial.println(fbdo.errorReason().c_str());
+
+  if (tagSuccess) {
+    Serial.print("[DB] Tag data saved to ");
+    Serial.println(tagPath);
+    successfulUploads++;
+  } 
+  else {
+    Serial.print("[ERROR] Failed to save tag: ");
+    Serial.println(fbdo.errorReason());
+    failedUploads++;
     return false;
   }
+
+  // Create a tag reading entry
+  FirebaseJson readingJson;
+  String locationId = currentLocation;
+  locationId.toLowerCase(); // This modifies the string in place in Arduino
+  locationId.replace(" ", "-"); // Convert "Living Room" to "living-room"
   
-  // Update room user count
-  String roomPath = "/rooms/" + currentLocation;
+  String readingId = String(unixTime) + "_" + epcHex.substring(0, 8);
+  String readingPath = TAG_READINGS_PATH;
+  readingPath += "/" + locationId;
+  readingPath += "/" + dateKey;
+  readingPath += "/" + readingId;
   
-  // Get current room data
-  if (Firebase.RTDB.getJSON(&fbdo, roomPath.c_str())) {
-    FirebaseJson* roomJson = fbdo.jsonObjectPtr();
-    FirebaseJsonData activeUsers;
-    roomJson->get(activeUsers, "active_users");
+  readingJson.set("tag_id", epcHex);
+  readingJson.set("timestamp", unixTime);
+  readingJson.set("rssi", rssi);
+  
+  bool readingSuccess = Firebase.RTDB.setJSON(&fbdo, readingPath.c_str(), &readingJson);
+  
+  if (readingSuccess) {
+    Serial.print("[DB] Tag reading recorded at ");
+    Serial.println(readingPath);
+  } 
+  else {
+    Serial.print("[ERROR] Failed to record tag reading: ");
+    Serial.println(fbdo.errorReason());
+  }
+  
+  // Try to find and update person location if this tag is associated with someone
+  // First try to find by ASCII text which might contain user ID
+  if (epcAscii.length() > 0) {
+    String potentialUserId = epcAscii;
+    potentialUserId.trim();
     
-    // Update room data
-    FirebaseJson updateJson;
-    updateJson.set("active_users", activeUsers.intValue + 1);
-    updateJson.set("last_update", (int)time(NULL));
-    
-    bool roomSuccess = Firebase.RTDB.updateNode(&fbdo, roomPath.c_str(), &updateJson);
-    if (!roomSuccess) {
-      Serial.print("Failed to update room data: ");
-      Serial.println(fbdo.errorReason().c_str());
+    if (potentialUserId.length() >= 6) { // Reasonable minimum length for an ID
+      // Look for person with matching user_id
+      updateUserLocation(potentialUserId, currentLocation);
     }
   }
-  logEvent("tag_detected", epcHex, currentLocation);
   
-  // Update system statistics
-  FirebaseJson statsJson;
-  statsJson.set("total_tags_processed", totalTagsProcessed);
-  statsJson.set("successful_uploads", successfulUploads);
-  statsJson.set("failed_uploads", failedUploads);
-  statsJson.set("last_tag", epcHex);
-  statsJson.set("last_update", formattedTime);
-  
-  bool statsSuccess = Firebase.RTDB.updateNode(&fbdo, SYSTEM_STATUS_PATH + String("/stats"), &statsJson);
-  additionalSuccess = additionalSuccess && statsSuccess;
-  
-  return tagSuccess;
+  return true;
 }
 
-bool userExists(const String& userId) {
-  String userPath = String(USERS_PATH) + "/" + userId;
-  // Use a temporary FirebaseData object to avoid interfering with fbdo
-  FirebaseData tempFbdo;
-  bool success = Firebase.RTDB.get(&tempFbdo, userPath.c_str());
-  if (!success) {
-    // Not found or error
-    return false;
-  }
-  // If the node exists and has any value, consider it exists
-  return tempFbdo.dataType() != "null";
-}
-
-void updateUserLocation(const String& userId, const String& roomName) {
-  if (!firebaseInitialized) return;
-  // Check if user exists before updating room user list
-  if (!userExists(userId)) {
-    setLED(COLOR_ERROR, 3, 200); // Blink red 3 times for user not found
-    return;
-  }
-  setLED(COLOR_WIFI, 3, 200); // Blink cyan 3 times for user found
-
-  // --- Sanitize and validate roomName and userId ---
-  String cleanRoomName = roomName;
-  cleanRoomName.trim();
-  cleanRoomName.replace(" ", "_"); // Always use underscores for room names
-
-  String cleanUserId = userId;
-  cleanUserId.trim();
-
-  // Check for empty strings
-  if (cleanRoomName.length() == 0 || cleanUserId.length() == 0) {
-    setLED(COLOR_RECEIVE, 3, 200); // Blink magenta for path error
+void updateUserLocation(const String& userId, const String& locationName) {
+  if (userId.isEmpty() || locationName.isEmpty()) {
+    Serial.println("Invalid user ID or location name");
     return;
   }
 
-  // Check for non-alphanumeric characters (except underscore)
-  bool invalidChar = false;
-  for (size_t i = 0; i < cleanRoomName.length(); i++) {
-    if (!isalnum(cleanRoomName[i]) && cleanRoomName[i] != '_') invalidChar = true;
-  }
-  for (size_t i = 0; i < cleanUserId.length(); i++) {
-    if (!isalnum(cleanUserId[i]) && cleanUserId[i] != '_') invalidChar = true;
-  }
-  if (invalidChar) {
-    setLED(pixel.Color(50, 50, 50), 3, 200); // Blink white for invalid char
-    return;
+  // Normalize location name
+  String locationId = locationName;
+  locationId.toLowerCase();
+  locationId.replace(" ", "-");
+
+  // Current timestamp
+  unsigned long now = time(nullptr);
+  
+  // First update the person's location in the people collection
+  String query = String(PEOPLE_PATH) + "?orderBy=\"user_id\"&equalTo=\"" + userId + "\"";
+  bool personFound = false;
+  String personId = "";
+
+  if (Firebase.RTDB.getJSON(&fbdo, query.c_str())) {
+    FirebaseJson* json = fbdo.jsonObjectPtr();
+    size_t jsonSize = 0;
+    if (json != nullptr) {
+      jsonSize = json->iteratorBegin();
+    }
+    if (json != nullptr && jsonSize > 0) {
+      size_t len = json->iteratorBegin();
+      for (size_t i = 0; i < len && !personFound; i++) {
+        FirebaseJson::IteratorValue value = json->valueAt(i);
+        personId = value.key.c_str();
+        personFound = true;
+      }
+      json->iteratorEnd();
+    }
   }
 
-  // --- Build path and update Firebase ---
-  String userRoomPath = String(VISITORS_ROOMS_PATH) + "/" + cleanRoomName + "/users/" + cleanUserId;
+  if (personFound) {
+    // Update person's current location
+    String personPath = String(PEOPLE_PATH) + "/" + personId + "/locations";
+    FirebaseJson locationJson;
+    locationJson.set("current", locationId);
+    
+    // Add entry to location history
+    String historyPath = personPath + "/history/" + String(now);
+    FirebaseJson historyJson;
+    historyJson.set("location", locationId);
+    historyJson.set("timestamp", now);
+    
+    Firebase.RTDB.updateNode(&fbdo, personPath.c_str(), &locationJson);
+    Firebase.RTDB.setJSON(&fbdo, historyPath.c_str(), &historyJson);
+    
+    Serial.print("[DB] Updated location for person in PEOPLE collection: ");
+    Serial.println(personId);
+    
+    // Also add person to current location's occupants list
+    String occupantsPath = String(LOCATIONS_PATH) + "/" + locationId + "/occupants/" + personId;
+    Firebase.RTDB.setBool(&fbdo, occupantsPath.c_str(), true);
+  } else {
+    Serial.println("[INFO] Person not found in PEOPLE collection with ID: " + userId);
+  }
+  
+  // For backward compatibility, also update energy dashboard visitor information
+  String dashboardLocationId = locationId;
+  dashboardLocationId.replace("-", "_"); // Convert format for dashboard
+  
+  String userVisitorPath = VISITORS_ROOMS_PATH "/" + dashboardLocationId + "/users/" + userId;
+
+  // Update energy dashboard visitors information
   FirebaseJson userJson;
   userJson.set("present", true);
-  userJson.set("last_seen", (int)time(NULL));
-  bool roomUserSuccess = Firebase.RTDB.updateNode(&fbdo, userRoomPath.c_str(), &userJson);
-  if (!roomUserSuccess) {
-    setLED(COLOR_WARNING, 3, 200); // Blink yellow 3 times for room update failure
-    // Serial.print("Failed to update room user list: ");
-    // Serial.println(fbdo.errorReason().c_str());
-  }
-  // Old logic for /users and /locations is now disabled/commented out
-  // FirebaseJson userJson;
-  // userJson.set("current_location", locationId);
-  // userJson.set("last_seen", (int)time(NULL));
-  // String userPath = String(USERS_PATH) + "/" + userId;
-  // bool userSuccess = Firebase.RTDB.updateNode(&fbdo, userPath.c_str(), &userJson);
-  // if (!userSuccess) {
-  //   Serial.print("Failed to update user location: ");
-  //   Serial.println(fbdo.errorReason().c_str());
-  // }
-  // FirebaseJson locationJson;
-  // String occupantPath = "occupants/" + userId;
-  // locationJson.set(occupantPath, true);
-  // locationJson.set("last_activity", (int)time(NULL));
-  // String locationPath = String(LOCATIONS_PATH) + "/" + locationId;
-  // bool locationSuccess = Firebase.RTDB.updateNode(&fbdo, locationPath.c_str(), &locationJson);
-  // if (!locationSuccess) {
-  //   Serial.print("Failed to update location occupants: ");
-  //   Serial.println(fbdo.errorReason().c_str());
-  // }
-}
-
-void logEvent(const String& eventType, const String& tagId, const String& locationId) {
-  if (!firebaseInitialized) return;
+  userJson.set("last_seen", now);
   
-  // Create a unique event ID with timestamp
-  String eventId = String((int)time(NULL)) + "_" + tagId.substring(0, 8);
-  
-  // Create event JSON
-  FirebaseJson eventJson;
-  eventJson.set("type", eventType);
-  eventJson.set("tag_id", tagId);
-  eventJson.set("location", locationId);
-  eventJson.set("timestamp", getFormattedTime());
-  eventJson.set("unix_time", (int)time(NULL));
-  
-  // Path for this event
-  String eventPath = String(EVENTS_PATH) + "/" + eventId;
-  
-  // Upload to Firebase
-  bool success = Firebase.RTDB.setJSON(&fbdo, eventPath.c_str(), &eventJson);
-  
-  if (!success) {
-    Serial.print("Failed to log event: ");
-    Serial.println(fbdo.errorReason().c_str());
-  }
+  if (Firebase.RTDB.updateNode(&fbdo, userVisitorPath.c_str(), &userJson)) {
+    Serial.print("[DB] Updated legacy dashboard visitor location at: ");
+    Serial.println(userVisitorPath);
+    
+    // Now update total visitor count
+    String visitorsPath = VISITORS_ROOMS_PATH "/" + dashboardLocationId + "/users";
+    if (Firebase.RTDB.getJSON(&fbdo, visitorsPath)) {
+      FirebaseJson* json = fbdo.jsonObjectPtr();
+      if (json != nullptr) {
+        size_t len = json->iteratorBegin();
+        int userCount = 0;
+        unsigned long cutoffTime = now - USER_TIMEOUT_SECONDS;
+        
+        FirebaseJson updateJson;
+        
+        // Count users who have been seen recently
+        for (size_t i = 0; i < len; i++) {
+          FirebaseJson::IteratorValue value = json->valueAt(i);
+          String userKey = value.key.c_str();
+          
+          // Check if this is a valid user entry
+          if (userKey.length() > 0 && value.type == FirebaseJson::JSON_OBJECT) {
+            // Get the last_seen value for this user
+            FirebaseJsonData lastSeen;
+            json->get(lastSeen, value.key + "/last_seen");
+            
+            if (lastSeen.success && lastSeen.typeNum == FirebaseJson::JSON_INT) {
+              unsigned long userLastSeen = lastSeen.intValue;
+              
+              // If user was seen recently, count them
+              if (userLastSeen > cutoffTime) {
+                userCount++;
+              }
+              // If user hasn't been seen recently, mark them as not present
+              else {
+                updateJson.set(value.key + "/present", false);
+              }
+            }
+          }
+        }
+        
+        json->iteratorEnd();
+        
+        // Update total visitor count
+        String totalVisitorsPath = "/energy_dashboard/visitors/total";
+        Firebase.RTDB.setInt(&fbdo, totalVisitorsPath.c_str(), userCount);
+      }
+    }
+  }  
 }
 
 void sendResponse(bool success, uint16_t sequence) {
@@ -506,7 +532,7 @@ String getFormattedTime() {
   return String(timeString);
 }
 
-void checkESPResponse() {
+void checkUNOResponse() {
   while (Serial1.available()) {
     String response = Serial1.readStringUntil('\n');
     response.trim();
@@ -533,25 +559,23 @@ void checkESPResponse() {
         lastHeartbeatReceived = millis();
         Serial.println(F("UNO acknowledged heartbeat"));
       } else {
-        Serial.print(F("Received ACK from UNO: "));
+        Serial.print("Received ACK from UNO: ");
         Serial.println(ackId);
       }
     } else if (response.startsWith("HEARTBEAT")) {
-      // Got heartbeat from UNO, send acknowledgment
-      Serial1.println(F("ACK:HEARTBEAT"));
+      // Got heartbeat from UNO, send acknowledgment in the format UNO expects
+      Serial1.println(F("HEARTBEAT_ACK"));
       Serial1.flush();
       lastHeartbeatReceived = millis();
-      Serial.println(F("Received heartbeat from UNO"));
+      Serial.println(F("Received heartbeat from UNO, sent HEARTBEAT_ACK"));
+      
+      // Also set ESP ready status
+      espReady = true;
     }
   }
 }
 
-void sendHeartbeatToESP() {
-  Serial.println(F("Sending heartbeat to UNO..."));
-  Serial1.println(F("HEARTBEAT"));
-  Serial1.flush();
-  lastHeartbeatSent = millis();
-}
+
 
 void updateSystemStatus() {
   if (!firebaseInitialized) return;
@@ -629,9 +653,9 @@ void updatePendingWriteCommands(const char* newStatus) {
         String timestampPath = String(COMMANDS_PATH) + "/" + key + "/updated_at";
         Firebase.RTDB.setInt(&fbdo, timestampPath.c_str(), (int)time(NULL));
         
-        Serial.print("Updated write_rfid command ");
+        Serial.print("[DB] Updated command: ");
         Serial.print(key);
-        Serial.print(" to status: ");
+        Serial.print(" → ");
         Serial.println(newStatus);
       }
     }
@@ -640,8 +664,12 @@ void updatePendingWriteCommands(const char* newStatus) {
 }
 
 void checkNewCommands() {
-  if (!firebaseInitialized) return;
+  if (!firebaseInitialized) {
+    Serial.println("Firebase not initialized, can't check commands");
+    return;
+  }
 
+  Serial.println("Checking for new commands at path: " + String(COMMANDS_PATH));
   // Get all commands
   if (Firebase.RTDB.getJSON(&fbdo, COMMANDS_PATH)) {
     FirebaseJson *json = fbdo.jsonObjectPtr();
@@ -657,36 +685,58 @@ void checkNewCommands() {
       // Skip non-object entries
       if (type != FirebaseJson::JSON_OBJECT) continue;
       
+      // Parse the command object
+      FirebaseJson commandObj;
+      commandObj.setJsonData(value);
+      
+      // Get command status
       FirebaseJsonData statusData;
-      FirebaseJson commandJson;
-      commandJson.setJsonData(value);
-      commandJson.get(statusData, "status");
+      commandObj.get(statusData, "status");
       
       // Only process pending commands
       if (!statusData.success || statusData.stringValue != "pending") continue;
       
-      FirebaseJsonData typeData;
+      // Get user ID from params
+      FirebaseJsonData paramsData;
+      commandObj.get(paramsData, "params");
+      
+      if (!paramsData.success) continue;
+      
+      FirebaseJson params;
+      params.setJsonData(paramsData.stringValue);
+      
       FirebaseJsonData userIdData;
-      commandJson.get(typeData, "type");
-      commandJson.get(userIdData, "user_id");
+      params.get(userIdData, "user_id");
       
-      if (!typeData.success || !userIdData.success) continue;
-      
-      // Handle write_rfid command
-      if (typeData.stringValue == "write_rfid") {
-        // Send write command to UNO
-        String command = "WRITE:" + userIdData.stringValue;
-        Serial1.println(command);
-        Serial1.flush(); // Make sure command is sent
-        Serial.println("Sent to UNO: " + command); // Debug output
-        
-        // Update command status
-        updateCommandStatus(key.c_str(), "processing");
-        
-        // Update timestamp
-        String timestampPath = String(COMMANDS_PATH) + "/" + key + "/updated_at";
-        Firebase.RTDB.setInt(&fbdo, timestampPath.c_str(), (int)time(NULL));
+      if (!userIdData.success || userIdData.stringValue.isEmpty()) {
+        Serial.println("Missing or invalid user_id in command params");
+        continue;
       }
+      
+      // Format command for UNO
+      String command = "WRITE:" + userIdData.stringValue;
+      
+      // Send to UNO
+      Serial1.println(command);
+      Serial1.flush();
+      
+      // Wait a bit and send again for reliability
+      delay(100);
+      Serial1.println(command);
+      Serial1.flush();
+      
+      Serial.print("[WRITE] Sent to UNO: ");
+      Serial.println(command);
+      
+      // Update command status
+      updateCommandStatus(key.c_str(), "processing");
+      
+      // Update timestamp
+      String timestampPath = String(COMMANDS_PATH) + "/" + key + "/updated_at";
+      Firebase.RTDB.setInt(&fbdo, timestampPath.c_str(), (int)time(NULL));
+      
+      // Only process one command at a time
+      break;
     }
     json->iteratorEnd();
   }
@@ -795,32 +845,23 @@ void processSerialData() {
         
         // Process heartbeat messages - IMPORTANT FOR UNO-ESP CONNECTIVITY
         if (data.indexOf("HEARTBEAT") >= 0) {
-          // Now handles MEGA-style "HEARTBEAT:timestamp" format
-          // Send standard HEARTBEAT_ACK response that UNO is expecting
+          // Send standard HEARTBEAT_ACK response
           Serial1.println("HEARTBEAT_ACK");
           Serial1.flush(); // Ensure it's sent immediately
+          lastHeartbeatReceived = millis();
+          espReady = true;
           
-          // Also send ESP32:READY to confirm connection status
-          Serial1.println("ESP32:READY");
-          Serial1.flush();
-          
-          // Add an explicit ACK for the specific heartbeat format
-          if (data.indexOf(":") > 0) {
-            String timestamp = data.substring(data.indexOf(":") + 1);
-            Serial1.println("ACK:HEARTBEAT:" + timestamp);
-            Serial1.flush();
-          }
-          
-          if (shouldPrintDebug) {
-            Serial.println("Heartbeat acknowledged");
-          }
+          Serial.println("Received heartbeat from Arduino, sent HEARTBEAT_ACK");
         }
         else if (data.startsWith("ACK:")) {
+          Serial.print("Received ACK from Arduino: ");
+          Serial.println(data);
+          
           int colonPos = data.indexOf(':');
           if (colonPos > 0 && colonPos < data.length() - 1) {
             // Handle tag write acknowledgments
             if (data.indexOf("TAG_WRITTEN") > 0) {
-              Serial.println("Tag was successfully written");
+              Serial.println("[SUCCESS] RFID Tag was successfully written");
               
               // Update any pending commands to completed
               updatePendingWriteCommands("completed");
@@ -831,8 +872,11 @@ void processSerialData() {
           }
         }
         else if (data.startsWith("NAK:")) {
+          Serial.print("Received error response from Arduino: ");
+          Serial.println(data);
+          
           if (data.indexOf("TAG_WRITE_FAILED") > 0 || data.indexOf("TAG_AUTH_FAILED") > 0) {
-            Serial.println("Tag write operation failed");
+            Serial.println("[ERROR] RFID Tag write operation failed");
             
             // Update pending commands to failed
             updatePendingWriteCommands("failed");
@@ -844,6 +888,8 @@ void processSerialData() {
         // Process tag data
         else if (data.startsWith("TAG:")) {
           // Format: TAG:{sequence},{checksum},EPC,ASCII,RSSI
+          Serial.println("Received TAG data from Arduino");
+          
           int firstComma = data.indexOf(',', 4);
           int secondComma = data.indexOf(',', firstComma + 1);
           int thirdComma = data.indexOf(',', secondComma + 1);
@@ -856,20 +902,30 @@ void processSerialData() {
             String epcAscii = data.substring(thirdComma + 1, fourthComma);
             int rssi = data.substring(fourthComma + 1).toInt();
             
-            // Always ACK immediately to prevent UNO from getting stuck
+            Serial.print("Tag Data: Seq=");
+            Serial.print(sequence);
+            Serial.print(" EPC=");
+            Serial.print(epcHex);
+            Serial.print(" RSSI=");
+            Serial.println(rssi);
+            
+            // Always ACK immediately to prevent UNO/Mega from getting stuck
             Serial1.print("ACK:");
             Serial1.println(sequence);
             Serial1.flush();
+            Serial.println("Sent acknowledgment: ACK:" + String(sequence));
             
             // Process the tag data
             if (epcHex.length() > 0 && epcAscii.length() > 0) {
               setLED(COLOR_RECEIVE, 1, 200);
-              Serial.println("Processing tag: " + epcHex);
+              Serial.println("[INFO] Processing tag: " + epcHex + " (" + epcAscii + ")");
               
               if (uploadTagToFirebase(epcHex, epcAscii, rssi)) {
                 setLED(COLOR_SUCCESS, 1, 200);
+                Serial.println("[SUCCESS] Tag data processing complete");
               } else {
                 setLED(COLOR_ERROR, 1, 200);
+                Serial.println("[ERROR] Failed to process tag data");
               }
             }
           }

@@ -204,27 +204,23 @@ void sendHeartbeatToESP() {
 
 // Modify this function in your Arduino Uno code to recognize "ESP32:READY" instead of "ESP:READY"
 
-// Enhanced ESP response checker - based on MEGA implementation
+// Enhanced ESP response checker
 void checkESPResponse() {
-    static char buffer[64] = {0};
-    static int bufferIndex = 0;
-    unsigned long currentTime = millis();
-    
-    // Process data from ESP32 using String to match MEGA
     if (espSerial.available()) {
         String response = espSerial.readStringUntil('\n');
         response.trim();
         
-        Serial.print(F("ESP response: "));
+        Serial.print("ESP response: ");
         Serial.println(response);
         
         // Reset consecutive error counter on any response
         consecutiveCommErrors = 0;
         
         // Check for ESP ready message
-        if (response == "ESP32:READY" || response == "ESP:READY") {
-            Serial.println(F("ESP is ready to receive RFID data!"));
+        if (response == "ESP:READY") {
+            Serial.println("ESP is ready to receive RFID data!");
             espReady = true;
+            lastHeartbeatReceived = millis();
             
             // Blink LED to show ESP is ready
             for (int i = 0; i < 3; i++) {
@@ -249,15 +245,13 @@ void checkESPResponse() {
             espReady = true;
         }
         // Check for generic ACK
-        else if (response == "ACK" || response.startsWith("ESP:ACK") || 
-                response.startsWith("ESP32:ACK")) {
+        else if (response == "ACK" || response.startsWith("ESP:ACK")) {
             waitingForESPAck = false;
             digitalWrite(13, LOW); // Turn off LED after acknowledgment
         }
         // Check for error/negative acknowledgment
-        else if (response == "NAK" || response.startsWith("ESP:NAK") || 
-                response.startsWith("ESP32:NAK")) {
-            Serial.println(F("ESP reported error processing tag data"));
+        else if (response == "NAK" || response.startsWith("ESP:NAK")) {
+            Serial.println("ESP reported error processing tag data");
             waitingForESPAck = false;
             digitalWrite(13, LOW);
             consecutiveCommErrors++;
@@ -265,24 +259,26 @@ void checkESPResponse() {
         // Handle WRITE commands from webapp via ESP32
         else if (response.startsWith("WRITE:")) {
             String userData = response.substring(6); // Skip "WRITE:"
-            Serial.print(F("Received write command from webapp: "));
+            Serial.print("Received write command from webapp: ");
             Serial.println(userData);
             
-            // Write this data to the next available tag
+            // Try to write the data to a tag
             writeAsciiToTag(userData);
         }
     }
     
     // Check for heartbeat timing
+    unsigned long currentTime = millis();
     
     // Send heartbeat every 10 seconds if ESP is ready
     if (espReady && currentTime - lastHeartbeatSent > 10000) {
         sendHeartbeatToESP();
+        lastHeartbeatSent = currentTime;
     }
     
     // Check for heartbeat timeout (30 seconds)
     if (espReady && lastHeartbeatReceived > 0 && currentTime - lastHeartbeatReceived > 30000) {
-        Serial.println(F("WARNING: ESP heartbeat timeout - marking as not ready"));
+        Serial.println("WARNING: ESP heartbeat timeout - marking as not ready");
         espReady = false;
     }
 }
@@ -404,60 +400,33 @@ void setup() {
     while(espSerial.available()) espSerial.read();
     while(rfidSerial.available()) rfidSerial.read();
     
-    // Identify to ESP32
-    espSerial.println(F("UNO:STARTING"));
-    espSerial.flush();
-    Serial.println(F("Sent UNO:STARTING to ESP32"));
+    // Initialize with espReady false - will be set when ESP:READY is received
+    espReady = false;
     
-    // Wait for ESP32 ready message
-    Serial.println(F("Waiting for ESP32 (up to 30 seconds)..."));
-    unsigned long startTime = millis();
-    bool espFound = false;
+    // Initialize heartbeat timers
+    lastHeartbeatSent = millis();
+    lastHeartbeatReceived = millis();
     
-    // Try for 30 seconds, sending heartbeat every 5 seconds
-    while (millis() - startTime < 30000) {
-        if (espSerial.available()) {
-            checkESPResponse();
-            if (espReady) {
-                espFound = true;
-                break;
-            }
-        }
-        
-        // Send heartbeat every 5 seconds while waiting
-        if (millis() - lastHeartbeatSent > 5000) {
-            Serial.println(F("Sending heartbeat to ESP32..."));
-            sendHeartbeatToESP();
-        }
-        
-        delay(100);
-    }
-    
-    if (espFound) {
-        Serial.println(F("ESP32 connected!"));
-        digitalWrite(13, HIGH);
-        delay(500);
-        digitalWrite(13, LOW);
-    } else {
-        Serial.println(F("WARNING: ESP32 not found initially!"));
-        Serial.println(F("Will continue trying to connect in the background..."));
-        for(int i=0; i<3; i++) {
-            digitalWrite(13, HIGH);
-            delay(100);
-            digitalWrite(13, LOW);
-            delay(100);
-        }
-        // Don't mark as not ready, let the heartbeat system try to establish connection
-        espReady = false;
-    }
-    
-    Serial.println(F("\nModule Ready!"));
+    Serial.println(F("Module Ready!"));
     displayMenu();
 }
 
 void loop() {
   // Check for ESP communications first
   checkESPResponse();
+  
+  // Send heartbeat every 5 seconds if we're ready
+  if (millis() - lastHeartbeatSent > 5000) {
+    sendHeartbeatToESP();
+    lastHeartbeatSent = millis();
+  }
+  
+  // Check for heartbeat timeout (30 seconds)
+  unsigned long currentTime = millis();
+  if (espReady && lastHeartbeatReceived > 0 && currentTime - lastHeartbeatReceived > 30000) {
+    Serial.println(F("WARNING: ESP heartbeat timeout - marking as not ready"));
+    espReady = false;
+  }
   
   // Process tag queue every 200ms (reduced frequency for Uno)
   static unsigned long lastQueueProcess = 0;
@@ -503,9 +472,7 @@ void loop() {
       }
     }
   }
-  
-  // Process any incoming ESP responses - only print debug if interval passed
-  unsigned long currentTime = millis();
+ 
   bool shouldPrintDebug = (currentTime - lastDebugTime) >= DEBUG_INTERVAL;
   if (shouldPrintDebug) {
     lastDebugTime = currentTime;

@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, jsonify, make_response, request, flash, redirect, url_for, session
 import traceback
 import json
+import time
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from app.firebase.firebase_client import FirebaseClient
@@ -88,34 +89,61 @@ def onboarding_submit():
         # Format: First letter of first name + Last name + YYMMDD
         dob_date = datetime.strptime(dob, '%Y-%m-%d')
         user_id = f"{first_name[0]}{last_name}{dob_date.strftime('%y%m%d')}"
+        
+        # Print debug information
+        print(f"Generated user_id: {user_id}")
 
-        # Create visitor data
+        # Create visitor data using updated structure
         visitor_data = {
             'first_name': first_name,
             'last_name': last_name,
             'dob': dob,
-            'name': f'{first_name} {last_name}',
-            'user_id': user_id
+            'name': f'{first_name} {last_name}',  # For backward compatibility
+            'user_id': user_id,
+            'registration_date': datetime.now().strftime('%Y-%m-%d')
         }
 
-        # Add visitor to Firebase
+        # Add visitor to Firebase (now goes to people collection)
         visitor_id = FirebaseClient.add_visitor(visitor_data)
+        print(f"Added visitor with ID: {visitor_id}")
 
-        # Add RFID write command
-        FirebaseClient.add_command({
+        # Create command data with explicit user_id
+        command_data = {
             'type': 'write_rfid',
-            'user_id': user_id,
             'visitor_id': visitor_id,
-            'status': 'pending'
-        })
+            'user_id': user_id,  # Include user_id at top level for backward compatibility
+            'status': 'pending',
+            'timestamp': int(datetime.now().timestamp()),
+            'params': {
+                'user_id': user_id  # Also include in params for new structure
+            }
+        }
+        
+        # Print command data for debugging
+        print(f"Command data being sent to Firebase: {command_data}")
+        
+        # Add RFID write command
+        command_id = FirebaseClient.add_command(command_data)
+        print(f"Added command with ID: {command_id}")
+
+        # Store in session for confirmation page
+        session['registered_visitor'] = {
+            'id': visitor_id,
+            'first_name': first_name,
+            'last_name': last_name,
+            'user_id': user_id,
+            'command_id': command_id
+        }
 
         # Flash success message
-        flash('Registration successful!', 'success')
+        flash('Registration successful! Your RFID card is being prepared.', 'success')
 
-        # Redirect to instructions page
-        return redirect(url_for('main.onboarding_rfid_instructions', visitor_id=visitor_id))
+        # Redirect to success page
+        return redirect(url_for('main.onboarding_success'))
 
     except Exception as e:
+        print(f"Error in onboarding_submit: {str(e)}")
+        traceback.print_exc()
         flash(f'Error during registration: {str(e)}', 'error')
         return redirect(url_for('main.onboarding_index'))
 
@@ -508,9 +536,21 @@ def rooms():
 @main.route('/visitors')
 def visitors():
     """Visitors tracking page"""
+    # Using new method to get only people of type 'visitor'
     visitors_info = FirebaseClient.get_visitors()
+    
+    # Transform data for template if needed
+    formatted_visitors = {}
+    for visitor_id, visitor in visitors_info.items():
+        # Add any needed transformations for backward compatibility with templates
+        # For example, ensure firstName/lastName are available if templates expect them
+        if 'first_name' in visitor and 'firstName' not in visitor:
+            visitor['firstName'] = visitor['first_name']
+        if 'last_name' in visitor and 'lastName' not in visitor:
+            visitor['lastName'] = visitor['last_name']
+        formatted_visitors[visitor_id] = visitor
     
     return render_template('visitors.html',
                           page_title="Visitors",
                           back_url="/",
-                          visitors=visitors_info)
+                          visitors=formatted_visitors)

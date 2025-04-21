@@ -5,6 +5,13 @@ from app.firebase.firebase_client import FirebaseClient
 
 main = Blueprint('main', __name__)
 
+from flask import redirect, url_for
+
+@main.route('/grid')
+def grid_redirect():
+    """Redirect /grid to /battery/grid for compatibility with back button and direct URL."""
+    return redirect(url_for('battery.grid'))
+
 @main.route('/debug')
 def debug():
     """Debug route to show raw data"""
@@ -209,14 +216,36 @@ def index():
 def notifications():
     """Notifications/alerts page"""
     try:
-        # Get notifications from Firebase
-        notifications_data = FirebaseClient.get_notifications()
-        
-        # Debug logging
-        print("\nNotifications data:")
-        print(f"Type: {type(notifications_data)}")
-        print(f"Content: {notifications_data}")
-        
+        # Use hardcoded mock data instead of Firebase to ensure proper formatting
+        notifications_data = [
+            {
+                "id": "1",
+                "title": "Battery Alert",
+                "message": "Battery level is low (25%)",
+                "timestamp": "2025-04-13 10:30 AM",
+                "action": "View Battery Status",
+                "action_url": "/battery/info",
+                "priority": "high"
+            },
+            {
+                "id": "2",
+                "title": "Tip",
+                "message": "Sunny weather expected next week! Save electricity by using natural light.",
+                "timestamp": "2025-04-13 11:45 AM",
+                "action": "",
+                "action_url": "",
+                "priority": "medium"
+            },
+            {
+                "id": "3",
+                "title": "Energy Consumption",
+                "message": "Floor 2 is showing higher than normal energy usage",
+                "timestamp": "2025-04-13 12:15 PM",
+                "action": "View Floor Details",
+                "action_url": "/floor/floor2",
+                "priority": "low"
+            }
+        ]
         return render_template('notifications.html',
                               page_title="Notifications",
                               back_url="/",

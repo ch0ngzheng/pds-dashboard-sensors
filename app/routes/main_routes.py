@@ -382,6 +382,19 @@ def floor_detail(floor_id):
                             error_message=str(e),
                             back_url="/floors")
 
+@main.route('/room/<room_id>')
+def room_detail(room_id):
+    # Example: static room data (replace with DB or session lookup as needed)
+    all_rooms = [
+        {"id": "room1", "name": "Living Room", "consumption": 50, "status": "optimal"},
+        {"id": "room2", "name": "Kitchen", "consumption": 70, "status": "sub-optimal"},
+        {"id": "room3", "name": "Bedroom", "consumption": 30, "status": "critical"}
+    ]
+    room = next((r for r in all_rooms if r["id"] == room_id), None)
+    if not room:
+        return render_template('error.html', error_message="Room not found", back_url="/floors")
+    return render_template('room_detail.html', room=room)
+
 @main.route('/rooms')
 def rooms():
     """All rooms overview page"""

@@ -184,7 +184,7 @@ def index():
             print(f"Error fetching floor data from API: {api_error}")
             # Fallback to default data
             all_floors = [
-                {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
+                {"id": "floor1", "name": "First Floor", "consumption": 12, "status": "optimal"},
                 {"id": "floor2", "name": "Second Floor", "consumption": 15, "status": "sub-optimal"},
                 {"id": "floor3", "name": "Third Floor", "consumption": 2.2, "status": "critical"}
             ]
@@ -422,17 +422,17 @@ def rooms():
             else:
                 # Fallback to default data if API request fails
                 all_rooms = [
-                    {"id": "room1", "name": "Living Room", "consumption": 120, "status": "optimal", "floor_id": "floor1", "floor_name": "First Floor"},
-                    {"id": "room2", "name": "Kitchen", "consumption": 200, "status": "sub-optimal", "floor_id": "floor1", "floor_name": "First Floor"},
-                    {"id": "room3", "name": "Bedroom", "consumption": 80, "status": "critical", "floor_id": "floor2", "floor_name": "Second Floor"}
+                    {"id": "room1", "name": "Living Room", "consumption": 2125, "status": "optimal", "floor_id": "floor1", "floor_name": "First Floor"},
+                    {"id": "room2", "name": "Kitchen", "consumption": 3000, "status": "sub-optimal", "floor_id": "floor1", "floor_name": "First Floor"},
+                    {"id": "room3", "name": "Office", "consumption": 2000, "status": "critical", "floor_id": "floor2", "floor_name": "Second Floor"}
                 ]
         except Exception as api_error:
             print(f"Error fetching room data from API: {api_error}")
             # Fallback to default data
             all_rooms = [
-                {"id": "room1", "name": "Living Room", "consumption": 120, "status": "optimal", "floor_id": "floor1", "floor_name": "First Floor"},
-                {"id": "room2", "name": "Kitchen", "consumption": 200, "status": "sub-optimal", "floor_id": "floor1", "floor_name": "First Floor"},
-                {"id": "room3", "name": "Bedroom", "consumption": 80, "status": "critical", "floor_id": "floor2", "floor_name": "Second Floor"}
+                {"id": "room1", "name": "Living Room", "consumption": 2125, "status": "optimal", "floor_id": "floor1", "floor_name": "First Floor"},
+                {"id": "room2", "name": "Kitchen", "consumption": 3000, "status": "sub-optimal", "floor_id": "floor1", "floor_name": "First Floor"},
+                {"id": "room3", "name": "Office", "consumption": 2000, "status": "critical", "floor_id": "floor2", "floor_name": "Second Floor"}
             ]
         
         return render_template('rooms.html',

@@ -28,6 +28,23 @@ def grid():
     try:
         grid_data = FirebaseClient.get_grid_info()
         
+        # Define backup values
+        backup_grid_data = {
+            "purchased": 1200,   # kWh
+            "sold": 800,         # kWh
+            "revenue": 350.75,   # $
+            "connected": True
+        }
+        
+        # Use backup values if grid_data is None or missing keys
+        if not grid_data:
+            grid_data = backup_grid_data
+        else:
+            # Fill in any missing keys from backup
+            for key, value in backup_grid_data.items():
+                if key not in grid_data:
+                    grid_data[key] = value
+
         return render_template('grid.html',
                               page_title="Grid",
                               back_url="/battery/info",

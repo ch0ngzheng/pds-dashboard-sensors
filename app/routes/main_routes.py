@@ -367,6 +367,7 @@ def floor_detail(floor_id):
                 ]
             }
         
+        rooms = floor_data.get('rooms', [])
         return render_template('floor_detail.html',
                             page_title=f"Floor {floor_id.replace('floor', '')}",
                             back_url="/floors",

@@ -322,6 +322,7 @@ def floor_detail(floor_id):
         try:
             # Make a request to our own API endpoint
             response = requests.get(f'http://localhost:5004/api/floor/{floor_id}')
+            rooms = floor_data.get('rooms', [])
             if response.status_code == 200:
                 floor_data = response.json()
             else:

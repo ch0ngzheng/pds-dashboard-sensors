@@ -7,6 +7,14 @@ from app.routes.api_routes import api
 
 import os
 
+# Check for FIREBASE_CREDENTIALS_JSON in env (for Railway/production)
+if os.environ.get("FIREBASE_CREDENTIALS_JSON"):
+    firebase_json_path = "/tmp/firebase_adminsdk.json"  # or another safe path
+    with open(firebase_json_path, "w") as f:
+        f.write(os.environ["FIREBASE_CREDENTIALS_JSON"])
+    os.environ["FIREBASE_CREDENTIALS_PATH"] = firebase_json_path
+# else: FIREBASE_CREDENTIALS_PATH should already be set for local dev
+
 def create_app(config_class=Config):
     app = Flask(__name__, 
                 template_folder='app/templates',

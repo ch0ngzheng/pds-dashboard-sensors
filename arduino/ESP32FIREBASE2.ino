@@ -874,14 +874,46 @@ void processSerialData() {
           int colonPos = data.indexOf(':');
           if (colonPos > 0 && colonPos < data.length() - 1) {
             // Handle tag write acknowledgments
-            if (data.indexOf("TAG_WRITTEN") > 0) {
+            if (data.indexOf("TAG_WRITTEN:") > 0) {
+              // Format: ACK:TAG_WRITTEN:command_id:epc
+              String commandId = data.substring(data.indexOf("TAG_WRITTEN:") + 11);
+              String epc = commandId.substring(commandId.indexOf(":") + 1);
+              commandId = commandId.substring(0, commandId.indexOf(":"));
+              
               Serial.println("[SUCCESS] RFID Tag was successfully written");
+              Serial.print("Command ID: "); Serial.println(commandId);
+              Serial.print("EPC: "); Serial.println(epc);
               
-              // Update any pending commands to completed
-              updatePendingWriteCommands("completed");
-              
-              // Visual confirmation
-              setLED(COLOR_SUCCESS, 3, 200);
+              // Get command data to find visitor_id
+              FirebaseJson json;
+              if (Firebase.RTDB.getJSON(&fbdo, String(COMMANDS_PATH) + "/" + commandId)) {
+                json.setJsonData(fbdo.jsonString());
+                FirebaseJson::IteratorValue value;
+                String visitor_id;
+                
+                // Get visitor_id from command params
+                json.get(value, "params/visitor_id");
+                if (value.success) {
+                  visitor_id = value.stringValue;
+                  
+                  // Update tag with owner_id
+                  FirebaseJson tagData;
+                  tagData.set("owner_id", visitor_id);
+                  Firebase.RTDB.updateNodeAsync(&fbdo, String(TAGS_PATH) + "/" + epc, &tagData);
+                  
+                  // Update visitor's rfid_tags
+                  FirebaseJson tagInfo;
+                  tagInfo.set("added_date", getFormattedTime());
+                  tagInfo.set("active", true);
+                  Firebase.RTDB.updateNodeAsync(&fbdo, String(PEOPLE_PATH) + "/" + visitor_id + "/rfid_tags/" + epc, &tagInfo);
+                  
+                  // Update command status
+                  updateCommandStatus(commandId.c_str(), "completed");
+                  
+                  // Visual confirmation
+                  setLED(COLOR_SUCCESS, 3, 200);
+                }
+              }
             }
           }
         }

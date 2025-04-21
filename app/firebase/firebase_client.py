@@ -122,6 +122,7 @@ class FirebaseClient:
         instance = cls.get_instance()
         
         # Convert to new people format
+        # Initialize with required fields and structure
         person_data = {
             "type": "visitor",
             "first_name": visitor_data.get("first_name", ""),
@@ -130,8 +131,7 @@ class FirebaseClient:
             "user_id": visitor_data.get("user_id", ""),
             "rfid_tags": {},
             "locations": {
-                "current": "",
-                "history": []
+                "current": ""
             }
         }
         
@@ -146,6 +146,24 @@ class FirebaseClient:
         new_person_ref.set(person_data)
         
         return person_data['id']
+
+    @classmethod
+    def link_tag_to_visitor(cls, epc, visitor_id):
+        """Link a tag to a visitor after successful write"""
+        instance = cls.get_instance()
+        
+        # Update tag with owner_id
+        instance._tags_ref.child(epc).update({
+            'owner_id': visitor_id
+        })
+        
+        # Update visitor's rfid_tags
+        instance._people_ref.child(visitor_id).child('rfid_tags').update({
+            epc: {
+                'added_date': datetime.now().strftime('%Y-%m-%d'),
+                'active': True
+            }
+        })
 
     @classmethod
     def get_visitors(cls):
@@ -214,12 +232,6 @@ class FirebaseClient:
             # Update person's current location
             instance._people_ref.child(owner_id).child("locations").update({
                 "current": location_id
-            })
-            # Add to location history (optional)
-            history_ref = instance._people_ref.child(owner_id).child("locations").child("history").push()
-            history_ref.set({
-                "location": location_id,
-                "timestamp": timestamp
             })
         
         return reading

@@ -107,15 +107,15 @@ def onboarding_submit():
         visitor_id = FirebaseClient.add_visitor(visitor_data)
         print(f"Added visitor with ID: {visitor_id}")
 
-        # Create command data with explicit user_id
+        # Create command data with explicit user_id and visitor_id
         command_data = {
             'type': 'write_rfid',
             'visitor_id': visitor_id,
-            'user_id': user_id,  # Include user_id at top level for backward compatibility
             'status': 'pending',
             'timestamp': int(datetime.now().timestamp()),
             'params': {
-                'user_id': user_id  # Also include in params for new structure
+                'user_id': user_id,  # For writing to RFID
+                'visitor_id': visitor_id  # For linking after write
             }
         }
         
@@ -257,10 +257,16 @@ def index():
         visitors_info = FirebaseClient.get_visitors()
         
         # Debug logging
-        print("\nBattery Info in index route:")
-        print(f"Type: {type(battery_info)}")
-        print(f"Content: {battery_info}")
-        print(f"Keys: {battery_info.keys() if isinstance(battery_info, dict) else 'Not a dict'}")
+        try:
+            print("\nBattery Info in index route:")
+            print(f"Type: {type(battery_info)}")
+            if isinstance(battery_info, dict):
+                print("Content: {}".format({k: str(v) for k, v in battery_info.items()}))
+                print(f"Keys: {list(battery_info.keys())}")
+            else:
+                print("Content: Not a dictionary")
+        except Exception as debug_error:
+            print(f"Debug logging error: {debug_error}")
         
         # Add fallback values if needed
         if isinstance(battery_info, dict) and 'percentage' not in battery_info:

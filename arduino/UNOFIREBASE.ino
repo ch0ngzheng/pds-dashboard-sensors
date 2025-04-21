@@ -912,7 +912,7 @@ void handleAsciiWrite() {
 }
 
 // Automated function to write ASCII data received from webapp via ESP32
-void writeAsciiToTag(String tagData) {
+void writeAsciiToTag(String tagData, String commandId) {
     // Define passwords - standard for most RFID tags
     uint32_t defaultPassword = 0x00000000;
     uint32_t targetPassword = 0x12345678;
@@ -992,7 +992,16 @@ void writeAsciiToTag(String tagData) {
         if (success) {
             Serial.println(F("Successfully wrote data from webapp to tag!"));
             // Send acknowledgment back to ESP32
-            espSerial.println("ACK:TAG_WRITTEN");
+            // Include command ID and EPC in acknowledgment
+            espSerial.print("ACK:TAG_WRITTEN:");
+            espSerial.print(commandId);
+            espSerial.print(":");
+            // Print EPC
+            for (int i = 0; i < 12; i++) {
+                if (epcData[i] < 0x10) espSerial.print("0");
+                espSerial.print(epcData[i], HEX);
+            }
+            espSerial.println();
             break;
         }
     }

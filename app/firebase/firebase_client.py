@@ -207,9 +207,9 @@ class FirebaseClient:
                 print("Falling back to default floor data")
                 # Return default data if nothing found in Firebase
                 return [
-                    {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
-                    {"id": "floor2", "name": "Second Floor", "consumption": 200, "status": "sub-optimal"},
-                    {"id": "floor3", "name": "Third Floor", "consumption": 80, "status": "critical"}
+                    {"id": "floor1", "name": "First Floor", "consumption": 12, "status": "optimal"},
+                    {"id": "floor2", "name": "Second Floor", "consumption": 15, "status": "sub-optimal"},
+                    {"id": "floor3", "name": "Third Floor", "consumption": 2.2, "status": "critical"}
                 ]
                 
             print(f"\nRaw floors data from {used_path}:")
@@ -265,9 +265,9 @@ class FirebaseClient:
             traceback.print_exc()
             # Return default data in case of error
             return [
-                {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
-                {"id": "floor2", "name": "Second Floor", "consumption": 200, "status": "sub-optimal"},
-                {"id": "floor3", "name": "Third Floor", "consumption": 80, "status": "critical"}
+                {"id": "floor1", "name": "First Floor", "consumption": 12, "status": "optimal"},
+                {"id": "floor2", "name": "Second Floor", "consumption": 15, "status": "sub-optimal"},
+                {"id": "floor3", "name": "Third Floor", "consumption": 2.2, "status": "critical"}
             ]
             
     @staticmethod

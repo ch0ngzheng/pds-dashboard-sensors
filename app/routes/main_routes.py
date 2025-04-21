@@ -369,7 +369,9 @@ def floor_detail(floor_id):
         return render_template('floor_detail.html',
                             page_title=f"Floor {floor_id.replace('floor', '')}",
                             back_url="/floors",
-                            floor=floor_data)
+                            floor=floor_data,
+                            rooms=rooms,
+                            floor_plan_image=f"images/floor_{floor_data['id']}_plan.png")
     except Exception as e:
         print(f"Error in floor_detail route: {e}")
         traceback.print_exc()

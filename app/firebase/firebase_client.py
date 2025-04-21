@@ -337,7 +337,7 @@ class FirebaseClient:
             return {
                 "id": floor_id,
                 "name": f"Floor {floor_id.replace('floor', '')}",
-                "consumption": 150,
+                "consumption": 12,
                 "status": status,
                 "rooms": [
                     {"id": "room1", "name": "Conference Room", "consumption": 45},
@@ -360,7 +360,7 @@ class FirebaseClient:
             return {
                 "id": floor_id,
                 "name": f"Floor {floor_id.replace('floor', '')}",
-                "consumption": 150,
+                "consumption": 2,
                 "status": status,
                 "rooms": [
                     {"id": "room1", "name": "Conference Room", "consumption": 45},

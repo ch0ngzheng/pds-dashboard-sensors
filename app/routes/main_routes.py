@@ -176,17 +176,17 @@ def index():
                 # Fallback to default data if API request fails
                 print(f"API request failed with status code: {api_response.status_code}")
                 all_floors = [
-                    {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
-                    {"id": "floor2", "name": "Second Floor", "consumption": 200, "status": "sub-optimal"},
-                    {"id": "floor3", "name": "Third Floor", "consumption": 80, "status": "critical"}
+                    {"id": "floor1", "name": "First Floor", "consumption": 12, "status": "optimal"},
+                    {"id": "floor2", "name": "Second Floor", "consumption": 15, "status": "sub-optimal"},
+                    {"id": "floor3", "name": "Third Floor", "consumption": 2.2, "status": "critical"}
                 ]
         except Exception as api_error:
             print(f"Error fetching floor data from API: {api_error}")
             # Fallback to default data
             all_floors = [
                 {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
-                {"id": "floor2", "name": "Second Floor", "consumption": 200, "status": "sub-optimal"},
-                {"id": "floor3", "name": "Third Floor", "consumption": 80, "status": "critical"}
+                {"id": "floor2", "name": "Second Floor", "consumption": 15, "status": "sub-optimal"},
+                {"id": "floor3", "name": "Third Floor", "consumption": 2.2, "status": "critical"}
             ]
         
         # Count floors by status
@@ -288,17 +288,17 @@ def floors():
                 # Fallback to default data if API request fails
                 print(f"API request failed with status code: {response.status_code}")
                 all_floors = [
-                    {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
-                    {"id": "floor2", "name": "Second Floor", "consumption": 200, "status": "sub-optimal"},
-                    {"id": "floor3", "name": "Third Floor", "consumption": 80, "status": "critical"}
+                    {"id": "floor1", "name": "First Floor", "consumption": 12, "status": "optimal"},
+                    {"id": "floor2", "name": "Second Floor", "consumption": 15, "status": "sub-optimal"},
+                    {"id": "floor3", "name": "Third Floor", "consumption": 2.2, "status": "critical"}
                 ]
         except Exception as api_error:
             print(f"Error fetching floor data from API: {api_error}")
             # Fallback to default data
             all_floors = [
-                {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
-                {"id": "floor2", "name": "Second Floor", "consumption": 200, "status": "sub-optimal"},
-                {"id": "floor3", "name": "Third Floor", "consumption": 80, "status": "critical"}
+                {"id": "floor1", "name": "First Floor", "consumption": 12, "status": "optimal"},
+                {"id": "floor2", "name": "Second Floor", "consumption": 15, "status": "sub-optimal"},
+                {"id": "floor3", "name": "Third Floor", "consumption": 2.2, "status": "critical"}
             ]
         
         return render_template('floors.html',

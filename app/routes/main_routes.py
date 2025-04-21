@@ -17,7 +17,12 @@ def debug():
     """Debug route to show raw data"""
     try:
         battery_info = FirebaseClient.get_battery_info()
-        visitors_info = FirebaseClient.get_visitors()
+        # Use people-by-location for room summary
+location_dict = FirebaseClient.get_people_by_location()
+visitors_info = {
+    'rooms': {loc: len(users) for loc, users in location_dict.items()},
+    'total': sum(len(users) for users in location_dict.values())
+}
         
         debug_data = {
             "battery": battery_info,
@@ -51,7 +56,12 @@ def simple_index():
     """Simplified landing page with battery info"""
     try:
         battery_info = FirebaseClient.get_battery_info()
-        visitors_info = FirebaseClient.get_visitors()
+        # Use people-by-location for room summary
+location_dict = FirebaseClient.get_people_by_location()
+visitors_info = {
+    'rooms': {loc: len(users) for loc, users in location_dict.items()},
+    'total': sum(len(users) for users in location_dict.values())
+}
         
         # Print debug info
         print("\nSimple Index - Battery Info:")
@@ -114,7 +124,12 @@ def index():
     """Landing page with battery info and visitor tracking"""
     try:
         battery_info = FirebaseClient.get_battery_info()
-        visitors_info = FirebaseClient.get_visitors()
+        # Use people-by-location for room summary
+location_dict = FirebaseClient.get_people_by_location()
+visitors_info = {
+    'rooms': {loc: len(users) for loc, users in location_dict.items()},
+    'total': sum(len(users) for users in location_dict.values())
+}
         
         # Debug logging
         print("\nBattery Info in index route:")

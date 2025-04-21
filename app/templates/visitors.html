@@ -30,9 +30,14 @@
                         <span class="font-medium">{{ data.count }} visitor{{ 's' if data.count != 1 }}</span>
                     </div>
                     {% if data.people %}
-                    <ul class="ml-8 mt-1 text-gray-700 text-sm">
+                    <ul class="ml-8 mt-2 space-y-1">
                         {% for person in data.people %}
-                        <li>- {{ person }}</li>
+                        <li class="flex items-center bg-blue-50 rounded px-2 py-1">
+                            <span class="inline-flex items-center justify-center w-6 h-6 mr-2 rounded-full bg-blue-200 text-blue-700 font-bold">
+                                {{ person[0]|upper }}
+                            </span>
+                            <span class="font-medium text-blue-900">{{ person }}</span>
+                        </li>
                         {% endfor %}
                     </ul>
                     {% endif %}

@@ -63,7 +63,7 @@ class FirebaseClient:
                         user_data.get('locations', {}).get('current')
                         if isinstance(user_data, dict) else None
                     )
-                    if current_location:
+                    if current_location and current_location != "":
                         # Prefer the name if available, else fall back to user key
                         display_name = user_data.get('name', user) if isinstance(user_data, dict) else user
                         location_dict.setdefault(current_location, []).append(display_name)

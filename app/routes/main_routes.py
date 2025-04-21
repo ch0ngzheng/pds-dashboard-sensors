@@ -10,7 +10,7 @@ from app.utils.onboarding_utils import validate_name, validate_date, format_name
 main = Blueprint('main', __name__)
 
 # --- Onboarding routes ---
-@main.route('/onboarding/', methods=['GET'])
+@main.route('/onboarding', methods=['GET'])
 def onboarding_index():
     return render_template('onboarding/index.html')
 
@@ -105,6 +105,9 @@ def onboarding_submit():
 
         # Add visitor to Firebase (now goes to people collection)
         visitor_id = FirebaseClient.add_visitor(visitor_data)
+        
+        # Clear session after successful registration
+        session.pop('visitor', None)
         print(f"Added visitor with ID: {visitor_id}")
 
         # Create command data with explicit user_id and visitor_id

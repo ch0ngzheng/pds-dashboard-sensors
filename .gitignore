@@ -43,8 +43,6 @@ yarn-debug.log
 # Firebase
 pds-studio-firebase-adminsdk-fbsvc-cb9200e4d3.json
 
-# Compiled CSS
-app/static/css/tailwind.css
 
 # Project-specific
 instance/

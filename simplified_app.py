@@ -441,42 +441,23 @@ def notifications():
 def floors():
     """All floors overview page"""
     try:
-        # Fetch floor data from API
-        import requests
-        try:
-            # Make a request to our own API endpoint
-            response = requests.get('http://localhost:5004/api/floors')
-            if response.status_code == 200:
-                all_floors = response.json()
-                print(f"Fetched {len(all_floors)} floors from API for display")
-            else:
-                # Fallback to default data if API request fails
-                print(f"API request failed with status code: {response.status_code}")
-                all_floors = [
-                    {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
-                    {"id": "floor2", "name": "Second Floor", "consumption": 200, "status": "sub-optimal"},
-                    {"id": "floor3", "name": "Third Floor", "consumption": 80, "status": "critical"}
-                ]
-        except Exception as api_error:
-            print(f"Error fetching floor data from API: {api_error}")
-            # Fallback to default data
-            all_floors = [
-                {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
-                {"id": "floor2", "name": "Second Floor", "consumption": 200, "status": "sub-optimal"},
-                {"id": "floor3", "name": "Third Floor", "consumption": 80, "status": "critical"}
-            ]
+        # Directly fetch floor data from Firebase
+        all_floors = FirebaseClient.get_floors()
+        print(f"Fetched {len(all_floors)} floors for display")
+    except Exception as api_error:
+        print(f"Error fetching floor data: {api_error}")
+        # Fallback to default data if fetching fails
+        all_floors = [
+            {"id": "floor1", "name": "First Floor", "consumption": 120, "status": "optimal"},
+            {"id": "floor2", "name": "Second Floor", "consumption": 200, "status": "sub-optimal"},
+            {"id": "floor3", "name": "Third Floor", "consumption": 80, "status": "critical"}
+        ]
         
-        return render_template('floors.html',
-                              page_title="Floors",
-                              back_url="/",
-                              floors=all_floors)
-    except Exception as e:
-        print(f"Error in floors route: {e}")
-        traceback.print_exc()
-        return render_template('error.html',
-                              page_title="Error",
-                              error_message=str(e),
-                              back_url="/")
+    return render_template('floors.html',
+                            page_title="Floors",
+                            back_url="/",
+                            floors=all_floors)
+
 
 @main.route('/floor/<floor_id>')
 def floor_detail(floor_id):

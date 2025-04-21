@@ -49,8 +49,31 @@ class FirebaseClient:
                 "error": str(e)
             }
     
+class FirebaseClient:
     @staticmethod
-    def get_visitors():
+    def get_people_by_location():
+        """Aggregate number of people in each location and list who they are."""
+        try:
+            ref = db.reference('/people')
+            people_data = ref.get()
+            location_dict = {}
+            if people_data:
+                for user, user_data in people_data.items():
+                    # Traverse to /locations/current
+                    current_location = (
+                        user_data.get('locations', {}).get('current')
+                        if isinstance(user_data, dict) else None
+                    )
+                    if current_location:
+                        location_dict.setdefault(current_location, []).append(user)
+            # Prepare the result: {location: [user1, user2, ...]}
+            return location_dict
+        except Exception as e:
+            print(f"Error aggregating people by location: {e}")
+            traceback.print_exc()
+            return {}  # fallback empty dict
+
+
         """Get visitors information"""
         try:
             # Get reference to the database

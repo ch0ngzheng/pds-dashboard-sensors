@@ -418,8 +418,16 @@ def rooms():
 @main.route('/visitors')
 def visitors():
     """Visitors tracking page"""
-    visitors_info = FirebaseClient.get_visitors()
-    
+    # Get people by location
+    location_dict = FirebaseClient.get_people_by_location()
+    # Prepare data for template: {location: {count: int, people: [str, ...]}}
+    visitors_info = {
+        'locations': {
+            loc: {'count': len(users), 'people': users}
+            for loc, users in location_dict.items()
+        },
+        'total': sum(len(users) for users in location_dict.values())
+    }
     return render_template('visitors.html',
                           page_title="Visitors",
                           back_url="/",

@@ -338,12 +338,12 @@ def floor_detail(floor_id):
                 floor_data = {
                     "id": floor_id,
                     "name": f"Floor {floor_id.replace('floor', '')}",
-                    "consumption": 150,
+                    "consumption": 12,
                     "status": status,
                     "rooms": [
-                        {"id": "room1", "name": "Living Room", "consumption": 50, "status": "optimal"},
-                        {"id": "room2", "name": "Kitchen", "consumption": 70, "status": "sub-optimal"},
-                        {"id": "room3", "name": "Bedroom", "consumption": 30, "status": "critical"}
+                        {"id": "room1", "name": "Living Room", "consumption": 2125, "status": "optimal"},
+                        {"id": "room2", "name": "Kitchen", "consumption": 3000, "status": "sub-optimal"},
+                        {"id": "room3", "name": "Office", "consumption": 2000, "status": "critical"}
                     ]
                 }
         except Exception as api_error:
@@ -358,12 +358,12 @@ def floor_detail(floor_id):
             floor_data = {
                 "id": floor_id,
                 "name": f"Floor {floor_id.replace('floor', '')}",
-                "consumption": 150,
+                "consumption": 12,
                 "status": status,
                 "rooms": [
-                    {"id": "room1", "name": "Living Room", "consumption": 50, "status": "optimal"},
-                    {"id": "room2", "name": "Kitchen", "consumption": 70, "status": "sub-optimal"},
-                    {"id": "room3", "name": "Bedroom", "consumption": 30, "status": "critical"}
+                    {"id": "room1", "name": "Living Room", "consumption": 2125, "status": "optimal"},
+                    {"id": "room2", "name": "Kitchen", "consumption": 3000, "status": "sub-optimal"},
+                    {"id": "room3", "name": "Office", "consumption": 2000, "status": "critical"}
                 ]
             }
         
@@ -386,9 +386,9 @@ def floor_detail(floor_id):
 def room_detail(room_id):
     # Example: static room data (replace with DB or session lookup as needed)
     all_rooms = [
-        {"id": "room1", "name": "Living Room", "consumption": 50, "status": "optimal"},
-        {"id": "room2", "name": "Kitchen", "consumption": 70, "status": "sub-optimal"},
-        {"id": "room3", "name": "Bedroom", "consumption": 30, "status": "critical"}
+        {"id": "room1", "name": "Living Room", "consumption": 2125, "status": "optimal"},
+        {"id": "room2", "name": "Kitchen", "consumption": 3000, "status": "sub-optimal"},
+        {"id": "room3", "name": "Office", "consumption": 2000, "status": "critical"}
     ]
     room = next((r for r in all_rooms if r["id"] == room_id), None)
     if not room:

@@ -74,7 +74,8 @@ class FirebaseClient:
             traceback.print_exc()
             return {}  # fallback empty dict
 
-
+    @staticmethod
+    def get_visitors():
         """Get visitors information"""
         try:
             # Get reference to the database
@@ -85,7 +86,7 @@ class FirebaseClient:
             print(f"Error getting visitors info: {e}")
             traceback.print_exc()
             return {"count": 100, "trend": "up", "error": str(e)}
-    
+
     @staticmethod
     def get_notifications():
         """Get notifications from Realtime Database"""

@@ -48,8 +48,7 @@ class FirebaseClient:
                 "status": "charging",
                 "error": str(e)
             }
-    
-class FirebaseClient:
+
     @staticmethod
     def get_people_by_location():
         """Aggregate number of people in each location and list who they are."""
@@ -65,7 +64,9 @@ class FirebaseClient:
                         if isinstance(user_data, dict) else None
                     )
                     if current_location:
-                        location_dict.setdefault(current_location, []).append(user)
+                        # Prefer the name if available, else fall back to user key
+                        display_name = user_data.get('name', user) if isinstance(user_data, dict) else user
+                        location_dict.setdefault(current_location, []).append(display_name)
             # Prepare the result: {location: [user1, user2, ...]}
             return location_dict
         except Exception as e:

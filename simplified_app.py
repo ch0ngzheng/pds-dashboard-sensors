@@ -463,47 +463,32 @@ def floors():
 def floor_detail(floor_id):
     """Floor detail page"""
     try:
-        # Fetch floor data from API
-        import requests
-        try:
-            # Make a request to our own API endpoint
-            response = requests.get(f'http://localhost:5004/api/floor/{floor_id}')
-            if response.status_code == 200:
-                floor_data = response.json()
-                print(f"Fetched floor data for {floor_id} from API for display")
-            else:
-                # Fallback to default data if API request fails
-                print(f"API request failed with status code: {response.status_code}")
-                floor_data = {
-                    "id": floor_id,
-                    "name": f"Floor {floor_id.replace('floor', '')}",
-                    "consumption": 150,
-                    "status": "optimal",
-                    "rooms": [
-                        {"id": "room1", "name": "Living Room", "consumption": 50, "status": "optimal"},
-                        {"id": "room2", "name": "Kitchen", "consumption": 70, "status": "sub-optimal"},
-                        {"id": "room3", "name": "Bedroom", "consumption": 30, "status": "critical"}
-                    ]
-                }
-        except Exception as api_error:
-            print(f"Error fetching floor data from API: {api_error}")
-            # Fallback to default data
-            floor_data = {
-                "id": floor_id,
-                "name": f"Floor {floor_id.replace('floor', '')}",
-                "consumption": 150,
-                "status": "optimal",
-                "rooms": [
-                    {"id": "room1", "name": "Living Room", "consumption": 50, "status": "optimal"},
-                    {"id": "room2", "name": "Kitchen", "consumption": 70, "status": "sub-optimal"},
-                    {"id": "room3", "name": "Bedroom", "consumption": 30, "status": "critical"}
-                ]
-            }
+        # Directly fetch floor data from Firebase
+        floor_data = FirebaseClient.get_floor(floor_id)
+        print(f"Fetched floor data for {floor_id} for display")
+        # Extract rooms if present, else use empty list
+        rooms = floor_data.get('rooms', []) if isinstance(floor_data, dict) else []
+    except Exception as api_error:
+        print(f"Error fetching floor data: {api_error}")
+        # Fallback to default data if fetching fails
+        floor_data = {
+            "id": floor_id,
+            "name": f"Floor {floor_id.replace('floor', '')}",
+            "consumption": 150,
+            "status": "optimal",
+            "rooms": [
+                {"id": "room1", "name": "Living Room", "consumption": 50, "status": "optimal"},
+                {"id": "room2", "name": "Kitchen", "consumption": 70, "status": "sub-optimal"},
+                {"id": "room3", "name": "Bedroom", "consumption": 30, "status": "critical"}
+            ]
+        }
+        
         
         return render_template('floor_detail.html',
                             page_title=f"Floor {floor_id.replace('floor', '')}",
                             back_url="/floors",
-                            floor=floor_data)
+                            floor=floor_data,
+                            rooms=rooms)
     except Exception as e:
         print(f"Error in floor_detail route: {e}")
         traceback.print_exc()
